@@ -7,8 +7,8 @@ A Python package and CLI for downloading various physical oceanographic datasets
 Clone the package and navigate to the directory:
 
 ```bash
-git clone (enter url here)
-cd (enter package name here)
+git clone https://github.com/andrew-s28/physoce-datasets.git
+cd physoce-datasets
 ```
 
 ### uv
@@ -59,7 +59,7 @@ uv run datasets.py eke --help
 
 ### Options
 
-All commands share the same options:
+All commands share the same base options:
 
 - `--save-dir`: Directory where the dataset file is written. If not set, defaults to the package `data/` directory.
 - `--start-date`: Start date in `YYYY-MM-DD` format. If not set, uses the earliest available date.
