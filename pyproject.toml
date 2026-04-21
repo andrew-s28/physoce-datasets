@@ -10,10 +10,30 @@ dependencies = [
     "click>=8.2.1",
     "copernicusmarine>=2.3.0",
     "ecmwf-datastores-client>=0.5.1",
+    "gcsfs>=2026.3.0",
+    "h5py>=3.16.0",
+    "metpy>=1.7.1",
     "numpy>=2.4.4",
+    "pycoare>=0.4.0",
     "python-dotenv>=1.2.2",
     "xarray[accel,io,parallel]>=2026.2.0",
 ]
 
 [dependency-groups]
 notebook = ["ipykernel>=7.2.0", "matplotlib>=3.10.8"]
+
+[tool.ruff]
+line-length = 120
+select = ["ALL"]
+ignore = ["PD901", "RET504"]
+
+[project.scripts]
+physoce-datasets = "physoce_datasets.cli:cli"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["*"]

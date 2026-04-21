@@ -49,7 +49,7 @@ python datasets.py --help
 Available commands:
 
 - `eke`: Download altimetry-derived geostrophic velocities and compute eddy kinetic energy from Copernicus Marine Services.
-- `era5`: Download 10 m winds, surface temperature, and pressure data from the Copernicus Climate Data Store.
+- `era5`: ERA5 workflow group with `submit` and `download` subcommands.
 
 Show command help:
 
@@ -71,8 +71,16 @@ Run `eke` download with defaults:
 uv run datasets.py eke
 ```
 
-Run `era5` download with explicit options:
+Submit ERA5 jobs with explicit options:
 
 ```bash
-uv run datasets.py eke --save-dir data --start-date 2020-01-01 --end-date 2020-01-31
+uv run datasets.py era5 submit --save-dir data --start-date 2020-01-01 --end-date 2020-01-31 --max-active-requests 10
 ```
+
+Download and process ERA5 files once all remote jobs are successful:
+
+```bash
+uv run datasets.py era5 download --save-dir data
+```
+
+The ERA5 workflow writes its progress to `submitted_requests.csv` inside the save directory. If the script exits or is interrupted, rerun the same command to resume from saved state.
