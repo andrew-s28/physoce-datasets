@@ -30,9 +30,9 @@ def login_to_copernicus_marine() -> None:
     Overrides the default copernicusmarine login behavior to provide more user-friendly prompts and messages.
 
     """
-    click.echo("Attempting login...")
+    logger.info("Attempting login...")
     while not copernicusmarine.login(check_credentials_valid=True):
-        click.echo(
+        logger.warning(
             "No valid credentials found. Please enter your Copernicus Marine "
             "credentials. These will be stored in a file found at "
             "~/.copernicusmarine/.copernicusmarine-credentials for future use. "
@@ -42,7 +42,7 @@ def login_to_copernicus_marine() -> None:
         username = click.prompt("Enter your Copernicus Marine username", type=str)
         password = click.prompt("Enter your Copernicus Marine password", type=str, hide_input=True)
         copernicusmarine.login(username=username, password=password, force_overwrite=True)
-    click.echo("Login successful!")
+    logger.info("Login successful!")
 
 
 def create_data_dir(save_dir: Path | None) -> Path:
@@ -254,9 +254,9 @@ def download_eke(
                     format="NETCDF4",
                     engine="netcdf4",
                 )
-        click.echo(f"Download complete. Dataset saved to {save_file}.")
+        logger.info(f"Download complete. Dataset saved to {save_file}.")
     else:
-        click.echo("Download cancelled, exiting.")
+        logger.info("Download cancelled, exiting.")
 
 
 if __name__ == "__main__":
