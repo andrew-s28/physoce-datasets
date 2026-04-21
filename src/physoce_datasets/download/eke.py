@@ -36,8 +36,8 @@ def login_to_copernicus_marine() -> None:
             "No valid credentials found. Please enter your Copernicus Marine "
             "credentials. These will be stored in a file found at "
             "~/.copernicusmarine/.copernicusmarine-credentials for future use. "
-            "See https://toolbox-docs.marine.copernicus.eu/en/stable/usage/"
-            "login-usage.html for more information.",
+            "See https://toolbox-docs.marine.copernicus.eu/en/stable/usage/login-usage.html"
+            "for more information.",
         )
         username = click.prompt("Enter your Copernicus Marine username", type=str)
         password = click.prompt("Enter your Copernicus Marine password", type=str, hide_input=True)
