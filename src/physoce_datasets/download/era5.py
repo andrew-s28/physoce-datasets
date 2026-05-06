@@ -904,7 +904,7 @@ def submit_era5(
 
     # get request states, either by building a new one or loading from an existing states file
     start_dates, end_dates = monthly_jobs(start_date, end_date)
-    if state_file.exists():
+    if not state_file.exists():
         states = _build_request_state(start_dates, end_dates, area)
         _save_request_state(states, state_file)
     else:

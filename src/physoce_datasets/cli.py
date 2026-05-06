@@ -58,7 +58,7 @@ area_option = click.option(
     type=str,
     default=None,
     help=(
-        "Bounding box for the dataset in the format 'lon_min,lat_min,lon_max,lat_max'. "
+        "Bounding box for the dataset in the format 'lon_min,lon_max,lat_min,lat_max'. "
         "If not specified, defaults to global coverage."
     ),
 )
@@ -86,7 +86,7 @@ def _eke(
     start_date: str | None,
     end_date: str | None,
     save_file: str | None,
-    area_str: str | None,
+    area: str | None,
 ) -> None:
     """Download geostrophic velocities and compute eddy kinetic energy from Copernicus Marine Services.
 
@@ -99,7 +99,7 @@ def _eke(
             If not specified, defaults to the latest available date for the dataset.
         save_file (str | None): Filename to save the dataset. If not specified, defaults to a filename
             based on the dataset name and date range (e.g., "eke_2000-01-01_to_2020-12-31.nc").
-        area_str (str | None): Bounding box for the dataset in the format 'lon_min,lat_min,lon_max,lat_max'.
+        area (str | None): Bounding box for the dataset in the format 'lon_min,lat_min,lon_max,lat_max'.
             If not specified, defaults to global coverage.
 
     """
@@ -108,7 +108,7 @@ def _eke(
         start_datetime=start_date,
         end_datetime=end_date,
         save_file=save_file,
-        area_str=area_str,
+        area_str=area,
     )
 
 
@@ -126,7 +126,7 @@ def _era5_submit(
     save_dir: Path | None,
     start_date: str | None,
     end_date: str | None,
-    area_str: str | None,
+    area: str | None,
 ) -> None:
     """Submit ERA5 jobs only.
 
@@ -135,7 +135,7 @@ def _era5_submit(
             specified, defaults to a "data" directory in the current working directory.
         start_date (str | None): Start date for the dataset. Format should be YYYY-MM-DD.
         end_date (str | None): End date for the dataset. Format should be YYYY-MM-DD.
-        area_str (str | None): Bounding box for the dataset in the format 'lon_min,lat_min,lon_max,lat_max'.
+        area (str | None): Bounding box for the dataset in the format 'lon_min,lat_min,lon_max,lat_max'.
             If not specified, defaults to global coverage.
 
     """
@@ -143,7 +143,7 @@ def _era5_submit(
         save_dir=save_dir,
         start_date=start_date,
         end_date=end_date,
-        area_str=area_str,
+        area_str=area,
     )
 
 
