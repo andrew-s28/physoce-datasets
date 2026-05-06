@@ -2,17 +2,21 @@ from __future__ import annotations
 
 import contextlib
 import datetime
+import json
+import operator
 import os
 import time
+import warnings
 from pathlib import Path
-from typing import Final, Literal
+from typing import Final, Literal, TypedDict, cast
 
 import click
-import pandas as pd
+import numpy as np
 import xarray as xr
 from ecmwf.datastores import Client, Remote, Results
 from metpy.calc import relative_humidity_from_dewpoint
-from requests.exceptions import HTTPError
+from metpy.units import units
+from pycoare import coare_35
 from tqdm import tqdm
 
 from physoce_datasets.logging import logger
@@ -23,12 +27,42 @@ MIN_LON = -150
 MAX_LON = -120
 MIN_LAT = 30
 MAX_LAT = 60
-REQUEST_STATE_FILE = "submitted_requests.csv"
-DEFAULT_MAX_ACTIVE_REQUESTS = 10
-DEFAULT_POLL_INTERVAL_SECONDS = 1
+REQUEST_STATE_FILE = "submitted_requests.json"
+MAX_ACTIVE_REQUESTS = 10
+POLL_INTERVAL_SECONDS = 1
 ECMWF_JOB_LIMIT = 1000
+DATASET = "reanalysis-era5-single-levels"
 
 type JobStatus = Literal["accepted", "running", "successful", "failed", "rejected"]
+
+
+class RequestParams(TypedDict):
+    product_type: list[str]
+    variable: list[str]
+    date: str
+    time: list[str]
+    area: list[int]
+    data_format: str
+
+
+class RemoteParams(TypedDict):
+    jobID: str
+    status: str
+    created: str
+    started: str
+    finished: str
+    updated: str
+    metadata: dict
+
+
+class State(TypedDict):
+    start_date: str
+    end_date: str
+    request_id: str | None
+    remote_status: str | None
+    download_status: str | None
+    processing_status: str | None
+    request: RequestParams | None
 
 
 class RemoteJobStatus:
@@ -39,11 +73,12 @@ class RemoteJobStatus:
     SUCCESSFUL: Final[JobStatus] = "successful"
     FAILED: Final[JobStatus] = "failed"
     REJECTED: Final[JobStatus] = "rejected"
+    UNKNOWN: Final[str] = "unknown"
 
     ACTIVE: Final[tuple[JobStatus, ...]] = (ACCEPTED, RUNNING)
     SAVED: Final[tuple[JobStatus, ...]] = (ACCEPTED, RUNNING, SUCCESSFUL, FAILED, REJECTED)
     PREFILL: Final[tuple[JobStatus, ...]] = (SUCCESSFUL, ACCEPTED, RUNNING)
-    NON_ACTIVE: Final[tuple[JobStatus, ...]] = (SUCCESSFUL, FAILED, REJECTED)
+    FINISHED: Final[tuple[JobStatus, ...]] = (SUCCESSFUL, FAILED, REJECTED)
 
 
 class LocalJobStatus:
@@ -55,7 +90,7 @@ class LocalJobStatus:
     FAILED = "failed"
 
 
-def _request_state_path(save_dir: Path) -> Path:
+def _get_state_path(save_dir: Path) -> Path:
     return save_dir / REQUEST_STATE_FILE
 
 
@@ -79,11 +114,11 @@ def login_to_ecmwf_datastore() -> Client:
         with contextlib.redirect_stdout(Path(os.devnull).open("w", encoding="utf-8")) and contextlib.redirect_stderr(
             Path(os.devnull).open("w", encoding="utf-8"),
         ):
-            client = Client(progress=False)
+            client = Client(progress=False, retry_after=1, maximum_tries=10)
             client.check_authentication()
             logger.info("Login successful!")
     except Exception as e:  # noqa: BLE001
-        logger.info(f"Failed to authenticate with ECMWF Data Store: {e:s}")
+        logger.info(f"Failed to authenticate with ECMWF Data Store: {e}")
         logger.info(
             "No valid credentials found. Please enter your Climate Data Store "
             "API key. These will be stored in a file found at "
@@ -93,7 +128,7 @@ def login_to_ecmwf_datastore() -> Client:
         key = click.prompt("Enter your key", type=str, hide_input=True)
         with CONFIG_FILE.open("w") as f:
             f.write(f"url: https://cds.climate.copernicus.eu/api\nkey: {key}\n")
-        login_to_ecmwf_datastore()
+        client = login_to_ecmwf_datastore()
     return client
 
 
@@ -114,43 +149,6 @@ def create_data_dir(save_dir: Path | None) -> Path:
     return data_dir
 
 
-def setup_request(start_datetime: str | None, end_datetime: str | None) -> tuple[str, dict]:
-    """Set up the dataset and request parameters for downloading ERA5 reanalysis data.
-
-    Args:
-        start_datetime (str | None): The start datetime for the dataset in YYYY-MM-DD format.
-            If None, defaults to the earliest available datetime for the dataset.
-        end_datetime (str | None): The end datetime for the dataset in YYYY-MM-DD format.
-            If None, defaults to the latest available datetime for the dataset.
-
-    Returns:
-        tuple[str, dict]: A tuple containing the dataset name and the request parameters.
-
-    """
-    if start_datetime is None:
-        start_datetime = "2001-01-01"
-    if end_datetime is None:
-        end_datetime = datetime.datetime.now(tz=datetime.UTC).strftime("%Y-%m-%d")
-    dataset = "reanalysis-era5-single-levels"
-    request = {
-        "product_type": ["reanalysis"],
-        "variable": [
-            "10m_u_component_of_wind",
-            "10m_v_component_of_wind",
-            "2m_dewpoint_temperature",
-            "2m_temperature",
-            "sea_surface_temperature",
-            "surface_pressure",
-        ],
-        "date": f"{start_datetime}/{end_datetime}",
-        "time": [f"{hour:02d}:00" for hour in range(0, 24, 1)],
-        "area": [MAX_LAT, MIN_LON, MIN_LAT, MAX_LON],
-        "data_format": "netcdf",
-    }
-
-    return dataset, request
-
-
 def check_submitted_job(client: Client, request_id: str) -> Remote:
     """Check the status of a submitted job to the ECMWF Data Store.
 
@@ -161,21 +159,8 @@ def check_submitted_job(client: Client, request_id: str) -> Remote:
     Returns:
         Remote: The remote job object.
 
-    Raises:
-        RuntimeError: If there is an error checking the job status, such as if
-            the request ID is invalid or if there is a problem with the ECMWF
-            Data Store service.
-
     """
-    try:
-        remote = client.get_remote(request_id)
-    except HTTPError as e:
-        msg = (
-            f"Error checking job with request ID {request_id}. Try to re-run "
-            "with the --new-request flag to submit a new request for the "
-            "specified date range."
-        )
-        raise RuntimeError(msg) from e
+    remote = client.get_remote(request_id)
     return remote
 
 
@@ -216,6 +201,25 @@ def process_data(input_file: Path, output_file: Path) -> Path:
     """
     ds = xr.open_dataset(input_file)
     ds = ds.rename({"valid_time": "time"})
+    # convert temperatures to degC
+    ds["t2m"] -= 273.15
+    ds["d2m"] -= 273.15
+    ds["sst"] -= 273.15
+    # we can expect warnings in the wind stress calc (e.g., when sst is nan, over land), so silence warnings
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", RuntimeWarning)
+        ds["eastward_wind_stress"], ds["northward_wind_stress"] = xr.apply_ufunc(
+            compute_wind_stress,
+            ds["u10"],
+            ds["v10"],
+            ds["t2m"],
+            ds["d2m"],
+            ds["sst"],
+            ds["sp"],
+            input_core_dims=[["time"], ["time"], ["time"], ["time"], ["time"], ["time"]],
+            output_core_dims=[["time"], ["time"]],
+            vectorize=True,
+        )
     ds = ds.resample(time="1D").mean(keep_attrs=True)
     ds.attrs.update(ds.attrs)
     ds.attrs["history"] = (
@@ -231,174 +235,190 @@ def process_data(input_file: Path, output_file: Path) -> Path:
     return output_file
 
 
-def compute_relative_humidity(t2m: xr.DataArray, d2m: xr.DataArray) -> xr.DataArray:
+def compute_relative_humidity(t2m: np.ndarray, d2m: np.ndarray) -> np.ndarray:
     """Compute relative humidity from 2m temperature and 2m dewpoint temperature.
 
     Args:
-        t2m (xr.DataArray): 2m temperature in Kelvin.
-        d2m (xr.DataArray): 2m dewpoint temperature in Kelvin.
+        t2m (np.ndarray): 2m temperature in Kelvin.
+        d2m (np.ndarray): 2m dewpoint temperature in Kelvin.
 
     Returns:
-        xr.DataArray: Relative humidity in percentage.
+        np.ndarray: Relative humidity in percentage.
 
     """
     try:
         # drop metpy pint units and convert to percent
-        rh = relative_humidity_from_dewpoint(t2m, d2m).metpy.dequantify() * 100
+        rh = relative_humidity_from_dewpoint(t2m * units.degC, d2m * units.degC).m * 100
     except Exception as e:  # noqa: BLE001
-        logger.error(f"Error computing relative humidity: {e:s}")
-        rh = xr.full_like(t2m, fill_value=75.0)  # fill with a default value of 75% if there is an error
+        logger.error(f"Error computing relative humidity: {e}")
+        rh = np.full_like(t2m, fill_value=75.0)  # fill with a default value of 75% if there is an error
     return rh
 
 
-# def compute_wind_stress(
-#     u10: xr.DataArray,
-#     v10: xr.DataArray,
-#     t2m: xr.DataArray,
-#     d2m: xr.DataArray,
-#     sst: xr.DataArray,
-#     sp: xr.DataArray,
-# ) -> xr.DataArray:
-#     rh = compute_relative_humidity(t2m, d2m)
-#     mag = xr.ufuncs.sqrt(u10**2 + v10**2)
-#     c35 = coare_35(
-#         u=mag.values,
-#         t=t2m.values,
-#         rh=rh.values,
-#         ts=sst.values,
-#         p=sp.values,
-#         lat=45,
-#         zu=10,
-#         zt=2,
-#         zq=2,
-#         zrf=10,
-#     )
-#     tau
+def compute_wind_stress(
+    u10: np.ndarray,
+    v10: np.ndarray,
+    t2m: np.ndarray,
+    d2m: np.ndarray,
+    sst: np.ndarray,
+    sp: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Compute wind stress using standard ERA5 outputs and the COARE 3.5 bulk flux algorithm.
+
+    Args:
+        u10 (np.ndarray): 10m eastward wind component in m/s.
+        v10 (np.ndarray): 10m northward wind component in m/s.
+        t2m (np.ndarray): 2m temperature in degC.
+        d2m (np.ndarray): 2m dewpoint temperature in degC.
+        sst (np.ndarray): Sea surface temperature in degC.
+        sp (np.ndarray): Surface pressure in Pa.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: A tuple containing the eastward and northward wind stress components in N/m^2.
+
+    """
+    rh = compute_relative_humidity(t2m, d2m)
+    mag = np.sqrt(u10**2 + v10**2)
+    angle = np.arctan2(v10, u10)
+    c35 = coare_35(
+        u=mag,
+        t=t2m,
+        rh=rh,
+        ts=sst,
+        p=sp / 100,  # convert to millibars for pycoare input, see also https://github.com/pyCOARE/coare/issues/57
+        lat=np.mean([MIN_LAT, MAX_LAT]),
+        zu=10,
+        zt=2,
+        zq=2,
+        zrf=10,
+    )
+    tau_mag = c35.fluxes.tau
+    tau_east = tau_mag * np.cos(angle)
+    tau_north = tau_mag * np.sin(angle)
+    return tau_east, tau_north
 
 
-def monthly_jobs(request: dict) -> list[dict]:
+def monthly_jobs(start_date: str, end_date: str) -> tuple[list[str], list[str]]:
     """Split a request with a date range into multiple requests with monthly date ranges.
 
     Args:
-        request (dict): The original request dictionary with a date range in the "date" key.
+        start_date (str): The start date for the request. Format should be YYYY-MM-DD.
+        end_date (str): The end date for the request. Format should be YYYY-MM-DD.
 
     Returns:
         list[dict]: A list of request dictionaries with monthly date ranges.
 
     """
-    start_date_str, end_date_str = request["date"].split("/")
-    start_date = datetime.datetime.strptime(start_date_str, "%Y-%m-%d").astimezone(datetime.UTC)
-    end_date = datetime.datetime.strptime(end_date_str, "%Y-%m-%d").astimezone(datetime.UTC)
+    start_date_dt = datetime.datetime.strptime(start_date, "%Y-%m-%d").astimezone(datetime.UTC)
+    end_date_dt = datetime.datetime.strptime(end_date, "%Y-%m-%d").astimezone(datetime.UTC)
 
-    monthly_requests = []
-    current_start = start_date
-    while current_start < end_date:
+    start_dates, end_dates = [], []
+    current_start = start_date_dt
+    while current_start < end_date_dt:
         current_end = (current_start + datetime.timedelta(days=32)).replace(day=1) - datetime.timedelta(days=1)
-        current_end = min(current_end, end_date)
-        monthly_request = request.copy()
-        monthly_request["date"] = f"{current_start.strftime('%Y-%m-%d')}/{current_end.strftime('%Y-%m-%d')}"
-        monthly_requests.append(monthly_request)
+        current_end = min(current_end, end_date_dt)
+        start_dates.append(f"{current_start.strftime('%Y-%m-%d')}")
+        end_dates.append(f"{current_end.strftime("%Y-%m-%d")}")
         current_start = current_end + datetime.timedelta(days=1)
-    return monthly_requests
+    return start_dates, end_dates
 
 
-def _build_request_state(monthly_requests: list[dict]) -> pd.DataFrame:
-    return pd.DataFrame(
+def _create_requests(states: list[State]) -> list[State]:
+    for s in states:
+        if s["request"] is None:
+            s["request"] = {
+                "product_type": ["reanalysis"],
+                "variable": [
+                    "10m_u_component_of_wind",
+                    "10m_v_component_of_wind",
+                    "2m_dewpoint_temperature",
+                    "2m_temperature",
+                    "sea_surface_temperature",
+                    "surface_pressure",
+                ],
+                "date": f"{s["start_date"]}/{s["end_date"]}",
+                "time": [f"{hour:02d}:00" for hour in range(0, 24, 1)],
+                "area": [MAX_LAT, MIN_LON, MIN_LAT, MAX_LON],
+                "data_format": "netcdf",
+            }
+    return states
+
+
+def _build_request_state(start_dates: list[str], end_dates: list[str]) -> list[State]:
+    states: list[State] = [
         {
-            "start_date": pd.Series([r["date"].split("/")[0] for r in monthly_requests], dtype="string"),
-            "end_date": pd.Series([r["date"].split("/")[1] for r in monthly_requests], dtype="string"),
-            "request_id": pd.Series(["" for _ in monthly_requests], dtype="string"),
-            "remote_status": pd.Series(["" for _ in monthly_requests], dtype="string"),
-            "local_status": pd.Series([LocalJobStatus.PENDING for _ in monthly_requests], dtype="string"),
-            "raw_file": pd.Series(["" for _ in monthly_requests], dtype="string"),
-            "processed_file": pd.Series(["" for _ in monthly_requests], dtype="string"),
-            "error": pd.Series(["" for _ in monthly_requests], dtype="string"),
-        },
-    )
-
-
-def _normalize_request_state(df: pd.DataFrame) -> pd.DataFrame:
-    if "status" in df.columns and "remote_status" not in df.columns:
-        df = df.rename(columns={"status": "remote_status"})
-
-    expected_columns = [
-        "start_date",
-        "end_date",
-        "request_id",
-        "remote_status",
-        "local_status",
-        "raw_file",
-        "processed_file",
-        "error",
+            "start_date": s,
+            "end_date": e,
+            "request_id": None,
+            "remote_status": None,
+            "download_status": None,
+            "processing_status": None,
+            "request": None,
+        } for s, e in zip(start_dates, end_dates, strict=True)
     ]
-    for column in expected_columns:
-        if column not in df.columns:
-            df[column] = ""
-    df = df[expected_columns]
-    for column in ["request_id", "remote_status", "local_status", "raw_file", "processed_file", "error"]:
-        df[column] = df[column].astype("string").fillna("")
-    df["start_date"] = df["start_date"].astype("string").fillna("")
-    df["end_date"] = df["end_date"].astype("string").fillna("")
-    df["local_status"] = df["local_status"].replace("", LocalJobStatus.PENDING)
-    return df
+    states = _create_requests(states)
+    return states
 
 
-def _load_request_state_file(state_file: Path) -> pd.DataFrame:
-    if not state_file.exists():
-        msg = f"No request state found at {state_file}. Run era5 submit first."
-        raise RuntimeError(msg)
-    df = pd.read_csv(state_file, dtype="string")
-    return _normalize_request_state(df)
+def _load_request_state(state_file: Path) -> list[State]:
+    with state_file.open() as f:
+        states = json.load(f)
+    return states
 
 
-def _load_request_state(state_file: Path, monthly_requests: list[dict]) -> pd.DataFrame:
-    if not state_file.exists():
-        return _build_request_state(monthly_requests)
-
-    df = _load_request_state_file(state_file)
-
-    expected_dates = [r["date"] for r in monthly_requests]
-    existing_dates = [f"{row['start_date']}/{row['end_date']}" for _, row in df.iterrows()]
-    if existing_dates != expected_dates:
-        msg = "Existing request file does not match the submitted request. Use --new-request to overwrite this request."
-        raise RuntimeError(msg)
-    return df
-
-
-def _save_request_state(df: pd.DataFrame, state_file: Path) -> None:
+def _save_request_state(states: list[State], state_file: Path) -> None:
     tmp_file = state_file.with_suffix(".tmp")
-    df.to_csv(tmp_file, index=False)
+    with tmp_file.open("w") as f:
+        json.dump(states, f, indent=4)
     tmp_file.replace(state_file)
 
 
-def _active_request_count(df: pd.DataFrame) -> int:
-    mask = df["request_id"].ne("") & ~df["remote_status"].str.lower().isin(RemoteJobStatus.NON_ACTIVE)
-    return int(mask.sum())
-
-
-def _state_counts(df: pd.DataFrame) -> dict[str, int]:
-    """Return a dictionary with counts of requests in each state category.
+def _update_request_state(
+    states: list[State],
+    state_file: Path,
+    start_dates: list[str],
+    end_dates: list[str],
+) -> list[State]:
+    """Update the request states with the new date range from the user.
 
     Args:
-        df (pd.DataFrame): The request state dataframe.
+        states (list[State]): The current request states loaded from the states file.
+        state_file (Path): The path to the request states file for saving updates.
+        start_dates (list[str]): The list of start dates for the new date range.
+        end_dates (list[str]): The list of end dates for the new date range.
 
     Returns:
-        dict[str, int]: A dictionary with counts of requests in each state category.
+        list[State]: The updated request states with any new date ranges added.
 
     """
-    remote_status = df["remote_status"].str.lower()
-    local_status = df["local_status"].str.lower()
-    return {
-        "total": len(df),
-        "pending": int(df["request_id"].eq("").sum()),
-        "active": _active_request_count(df),
-        "successful": int(remote_status.eq(RemoteJobStatus.SUCCESSFUL).sum()),
-        "processed": int(local_status.eq(LocalJobStatus.PROCESSED).sum()),
-        "remote_failed": int(
-            remote_status.isin({RemoteJobStatus.FAILED, RemoteJobStatus.REJECTED}).sum(),
-        ),
-        "local_failed": int(local_status.eq(LocalJobStatus.FAILED).sum()),
-    }
+    existing_date_ranges = {(s["start_date"], s["end_date"]) for s in states}
+    for start_date, end_date in zip(start_dates, end_dates, strict=True):
+        if (start_date, end_date) not in existing_date_ranges:
+            states.append({
+                "start_date": start_date,
+                "end_date": end_date,
+                "request_id": None,
+                "remote_status": None,
+                "download_status": None,
+                "processing_status": None,
+                "request": None,
+            })
+    states = _create_requests(states)
+    states.sort(key=operator.itemgetter("start_date"))
+    _save_request_state(states, state_file)
+    return states
+
+
+def _delete_expired_requests(client: Client) -> None:
+    jobs = client.get_jobs(
+        ECMWF_JOB_LIMIT,
+        sortby="-created",
+        status=RemoteJobStatus.SUCCESSFUL,
+    ).json.get("jobs", [])
+    expired_job_ids = [
+        job.get("jobID") for job in jobs if job.get("metadata").get("results").get("type") == "results expired"
+    ]
+    client.delete(*expired_job_ids)
 
 
 def _get_active_job_count(client: Client) -> int:
@@ -488,20 +508,19 @@ def _request_matches(receipt_request: dict, target_request: dict) -> bool:
 
 def _prefill_submitted_requests_from_recent_jobs(
     client: Client,
-    monthly_requests: list[dict],
-    df: pd.DataFrame,
+    states: list[State],
     state_file: Path,
-) -> tuple[pd.DataFrame, int]:
-    """Populate state rows from recent matching jobs to avoid duplicate submissions.
+) -> tuple[list[State], int]:
+    """Populate states rows from recent matching jobs to avoid duplicate submissions.
 
     Args:
         client (Client): An authenticated ECMWF Data Store client.
         monthly_requests (list[dict]): The list of monthly request dictionaries to match against recent jobs.
-        df (pd.DataFrame): The current request state dataframe to update with matched request IDs and statuses.
-        state_file (Path): The path to the request state file for saving updates.
+        states (list[dict[str, str]]): The current request states dataframe to update with matched request IDs.
+        state_file (Path): The path to the request states file for saving updates.
 
     Returns:
-        tuple[pd.DataFrame, int]: The updated request state dataframe and the count of matched existing jobs.
+        tuple[pd.DataFrame, int]: The updated request states dataframe and the count of matched existing jobs.
 
     """
     jobs = client.get_jobs(
@@ -512,144 +531,192 @@ def _prefill_submitted_requests_from_recent_jobs(
 
     # if there are no recent jobs, return early to avoid unnecessary receipt retrieval step
     if not jobs:
-        return df, 0
+        return states, 0
 
-    # get receipts for all existing jobs, this is the step that takes the longest
-    receipts = [
-        client.get_receipt(str(job.get("jobID", ""))) for job in tqdm(jobs, desc="Fetching receipts for recent jobs")
+    # load all remotes from api, this is the step that takes the longest
+    remotes = [
+        client.get_remote(job.get("jobID")) for job in tqdm(jobs, desc="Fetching receipts for recent jobs")
     ]
 
-    # get requests and convert all lists to tuples for use as dict keys in lookup table
-    existing_requests = [
-        {
-            key: tuple(value) if isinstance(value, list) else value
-            for key, value in receipt.get("request").items()  # ty:ignore[unresolved-attribute]
-        }
-        for receipt in receipts
-    ]
+    # get requests and statuses for all existing jobs
+    existing_requests = {
+        remote.request_id: remote.request for remote in remotes
+    }
+    remote_status = {
+        remote.request_id: remote.status for remote in remotes
+    }
 
     # build a lookup table of recent requests to receipts for quick matching against monthly requests
     lookup = {
-        (request["date"], request["time"], request["area"], request["variable"], request["product_type"]): request
-        if request is not None
-        and isinstance(request, dict)
-        and "date" in request
-        and "time" in request
-        and "area" in request
-        and "variable" in request
-        and "product_type" in request
-        else None
-        for request in existing_requests
+        (
+            request["date"],
+            tuple(request["time"]),
+            tuple(request["area"]),
+            tuple(request["variable"]),
+            tuple(request["product_type"]),
+        ): request_id
+        for request_id, request in existing_requests.items()
     }
 
     # iterate through monthly requests and fill in request_id and remote_status from lookup table when a match is found
     matched_existing_jobs = 0
-    for i, request in enumerate(monthly_requests):
+    for s in states:
+        if s.get("remote_status") in RemoteJobStatus.FINISHED:
+            continue  # skip already finished jobs in states
+        request = s.get("request")
+        if request is None:
+            continue
         key = (
             request.get("date"),
-            tuple(request.get("time", [])),
-            tuple(request.get("area", [])),
-            tuple(request.get("variable", [])),
-            tuple(request.get("product_type", [])),
+            tuple(request.get("time")),
+            tuple(request.get("area")),
+            tuple(request.get("variable")),
+            tuple(request.get("product_type")),
         )
-        receipt = lookup.get(key)
-        if receipt is None:
+        request_id = lookup.get(key)
+        if request_id is None:
             continue
-        df.loc[i, "request_id"] = receipt.get("jobID", "")
-        df.loc[i, "remote_status"] = receipt.get("status", "")
-        df.loc[i, "error"] = ""
+        s["request_id"] = request_id
+        s["remote_status"] = remote_status[request_id]
         matched_existing_jobs += 1
 
-    _save_request_state(df, state_file)
-    return df, matched_existing_jobs
-
-
-def _poll_remote_statuses(client: Client, df: pd.DataFrame, state_file: Path) -> pd.DataFrame:
-    """Poll the ECMWF Data Store for status updates on active jobs and updates the request state dataframe accordingly.
-
-    Args:
-        client (Client): An authenticated ECMWF Data Store client.
-        df (pd.DataFrame): The current request state dataframe to update with polled statuses.
-        state_file (Path): The path to the request state file for saving updates.
-
-    Returns:
-        pd.DataFrame: The updated request state dataframe with the latest remote statuses.
-
-    """
-    # get indices where there is a request_id and the remote_status is still active (accepted/running) or unknown
-    indices = [
-        i
-        for i, row in df.iterrows()
-        if str(row["request_id"]).strip() and str(row["remote_status"]).lower() not in RemoteJobStatus.NON_ACTIVE
-    ]
-
-    # if there are no active jobs to poll, return early
-    if not indices:
-        return df
-
-    # get most recent 1000 jobs
-    jobs_payload = client.get_jobs(limit=ECMWF_JOB_LIMIT, sortby="-created").json
-    jobs = jobs_payload.get("jobs", [])
-    jobs_by_id = {job.get("jobID"): job for job in jobs if job.get("jobID") is not None}
-
-    # iterate through active/unknown jobs and update statuses in the
-    # dataframe according to the polled job statuses
-    for _, row in df.loc[indices].iterrows():
-        # extract relevant job from recent jobs list, if it exists, otherwise continue
-        job = jobs_by_id.get(row["request_id"])
-        if job is None:
-            continue
-        job_status = _extract_job_status(job)
-        if not job_status:
-            continue
-
-        # update the job status in the dataframe for this request
-        row["remote_status"] = job_status
-
-        # add an error if the remote job failed
-        if job_status == RemoteJobStatus.FAILED:
-            row["local_status"] = LocalJobStatus.FAILED
-            row["error"] = f"Remote job failed for request ID {row['request_id']}"
-
-    _save_request_state(df, state_file)
-    return df
+    _save_request_state(states, state_file)
+    return states, matched_existing_jobs
 
 
 def _submit_one_pending_request(
     client: Client,
-    dataset: str,
-    monthly_requests: list[dict],
-    df: pd.DataFrame,
+    states: list[State],
     state_file: Path,
-) -> pd.DataFrame:
-    """Submit one pending request to the ECMWF Data Store and updates the request state dataframe accordingly.
+) -> tuple[list[State], str]:
+    """Submit one pending request to the ECMWF Data Store and updates the request states dataframe accordingly.
 
     Args:
         client (Client): An authenticated ECMWF Data Store client.
-        dataset (str): The name of the dataset to request.
         monthly_requests (list[dict]): The list of monthly request dictionaries to submit from.
-        df (pd.DataFrame): The current request state dataframe to update with the submitted request ID and status.
-        state_file (Path): The path to the request state file for saving updates.
+        states (list[State]): The current request states list to update with the submitted request ID and status.
+        state_file (Path): The path to the request states file for saving updates.
 
     Returns:
-        pd.DataFrame: The updated request state dataframe.
+        tuple[list[State], str]: The updated request states list and the submitted request ID.
 
     """
-    pending_indices = df.index[df["request_id"] == ""].tolist()
+    # find the first index in the states where the request_id is None, meaning it has not been submitted yet
+    pending_indices = [i for i, s in enumerate(states) if s.get("request_id") is None]
+    # if everything has been submitted, return the states as is
     if not pending_indices:
-        return df
+        return states, ""
 
+    # grab the first pending request and submit it
     i = pending_indices[0]
-    request = monthly_requests[i]
-    remote = client.submit(dataset, request)
-    df.loc[i, "request_id"] = remote.request_id
-    df.loc[i, "remote_status"] = remote.status
-    df.loc[i, "error"] = ""
-    _save_request_state(df, state_file)
-    return df
+    # cast type for submission, this is safe because we always fill in the request before submission
+    request = cast("dict", states[i]["request"])
+    remote = client.submit(DATASET, request)
+
+    # update the states with the returned request ID and initial status
+    states[i]["request_id"] = remote.request_id
+    states[i]["remote_status"] = remote.status
+    _save_request_state(states, state_file)
+
+    return states, remote.request_id
 
 
-def _get_existing_datetimes(save_dir: Path, update_path: str) -> xr.DataArray:
+def _submit_requests(
+    client: Client,
+    states: list[State],
+    state_file: Path,
+    remaining_to_submit: int,
+    matched_existing_jobs: int,
+) -> list[State]:
+    """Submit pending requests to the ECMWF Data Store while enforcing active and total job caps.
+
+    Args:
+        client (Client): An authenticated ECMWF Data Store client.
+        states (list[State]): The current request states list to update with submitted request IDs and statuses.
+        state_file (Path): The path to the request states file for saving updates.
+        remaining_to_submit (int): The number of requests that still need to be submitted.
+        matched_existing_jobs (int): The number of requests that were pre-filled with existing jobs.
+
+    Returns:
+        list[State]: The updated request states list with submitted request IDs and statuses.
+
+    """
+    submitted = 0
+    with tqdm(total=remaining_to_submit + matched_existing_jobs, desc="Submission progress") as progress:
+        progress.n = matched_existing_jobs
+        progress.refresh()
+        while True:
+            # update progress bar with counts
+            progress.n = matched_existing_jobs + submitted
+            progress.refresh()
+
+            # break the loop if all requests are submitted (all requests have ids)
+            if all(s.get("request_id") for s in states):
+                break
+
+            # enforce active job cap by waiting to submit if we are at or above the max active requests limit
+            active_before = _get_active_job_count(client)
+            if active_before >= MAX_ACTIVE_REQUESTS:
+                time.sleep(POLL_INTERVAL_SECONDS)
+                continue
+
+            # if we're under the active job cap, submit one pending request
+            states, request_id = _submit_one_pending_request(
+                client=client,
+                states=states,
+                state_file=state_file,
+            )
+
+            # after submission, check if the request was successful and update the status
+            if request_id:
+                submitted += 1
+                states = _update_status_for_submitted_request(
+                    client=client,
+                    states=states,
+                    state_file=state_file,
+                    request_id=request_id,
+                )
+
+            # wait just a bit longer to be sure the newly submitted jobs have registered before we check again
+            time.sleep(POLL_INTERVAL_SECONDS)
+
+    _save_request_state(states, state_file)
+    return states
+
+
+def _update_status_for_submitted_request(
+    client: Client,
+    states: list[State],
+    state_file: Path,
+    request_id: str,
+) -> list[State]:
+    """Check the status of a submitted request and update the request states list accordingly.
+
+    Args:
+        client (Client): An authenticated ECMWF Data Store client.
+        states (list[State]): The current request states list to update with the latest remote statuses.
+        state_file (Path): The path to the request states file for saving updates.
+        request_id (str): The request ID for the submitted job to check the status of.
+
+    Returns:
+        list[State]: The updated request states list with the latest remote statuses.
+
+    """
+    s = next((s for s in states if s.get("request_id") == request_id), None)
+    if s is None:
+        logger.warning(f"Request for {request_id} not found.")
+        return states
+    try:
+        remote = client.get_remote(request_id)
+        s["remote_status"] = remote.status
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Error checking status for request ID {request_id}: {e}")
+        s["remote_status"] = "unknown"
+    _save_request_state(states, state_file)
+    return states
+
+
+def _get_existing_datetimes(save_dir: Path, update_path: str) -> xr.DataArray | None:
     """Get the datetime values from the existing file.
 
     Args:
@@ -659,13 +726,9 @@ def _get_existing_datetimes(save_dir: Path, update_path: str) -> xr.DataArray:
     Returns:
         xr.DataArray: The datetime values from the existing file.
 
-    Raises:
-        FileNotFoundError: If the update file does not exist in the save directory.
-
     """
     if not Path(save_dir / update_path).exists():
-        msg = f"Update file {update_path} not found in save directory {save_dir}."
-        raise FileNotFoundError(msg)
+        return None
 
     ds_existing = xr.open_dataset(save_dir / update_path)
     datetime_existing = ds_existing["time"]
@@ -673,144 +736,197 @@ def _get_existing_datetimes(save_dir: Path, update_path: str) -> xr.DataArray:
     return datetime_existing
 
 
+def _download_file(client: Client, state: State, save_file_path: Path) -> Path:
+    """Download the raw file for a completed request.
+
+    Args:
+        client (Client): An authenticated ECMWF Data Store client.
+        state (State): The request state for the job to download.
+        save_file_path (Path): The path to the file to save the downloaded data as.
+
+    Returns:
+        Path: The path to the downloaded raw file.
+
+    """
+    # setup file names
+    raw_file = save_file_path.with_name(
+        save_file_path.stem + f"_raw_{state['start_date']}_{state['end_date']}.nc",
+    )
+
+    # download results if not already downloaded
+    if (
+        state["download_status"] != LocalJobStatus.DOWNLOADED
+        and state["remote_status"] == RemoteJobStatus.SUCCESSFUL
+        and state["request_id"] is not None
+    ):
+        remote = check_submitted_job(client, state["request_id"])
+        results = _retrieve_results(remote)
+        results.download(str(raw_file))
+        state["download_status"] = LocalJobStatus.DOWNLOADED
+    return raw_file
+
+
+def _process_file(state: State, raw_file: Path, save_file_path: Path) -> Path:
+    """Process a downloaded raw file into a cleaned daily-mean file.
+
+    Args:
+        state (State): The request state for the job to process.
+        raw_file (Path): The path to the downloaded raw file.
+        save_file_path (Path): The path to save the processed file as.
+
+    Returns:
+        Path: The path to the processed file.
+
+    """
+    # process data if downloaded but not yet processed
+    if state["download_status"] == LocalJobStatus.DOWNLOADED:
+        try:
+            processed_file = save_file_path.with_name(
+                save_file_path.stem + f"_processed_{state['start_date']}_{state['end_date']}.nc",
+            )
+            process_data(raw_file, processed_file)
+            state["processing_status"] = LocalJobStatus.PROCESSED
+            # remove raw file after processing
+            if raw_file.exists():
+                raw_file.unlink()
+        # If anything goes wrong, mark local status as failed and log the error
+        # but do not raise so other requests can continue
+        except Exception as e:  # noqa: BLE001
+            logger.exception(f"Error processing file for request ID {state['request_id']}: {e}")
+            state["processing_status"] = LocalJobStatus.FAILED
+    return processed_file
+
+
 def _download_and_process_ready_requests(
     client: Client,
-    df: pd.DataFrame,
+    states: list[State],
     save_dir: Path,
     state_file: Path,
-    update_file: str | None = None,
-) -> pd.DataFrame:
+    save_file: str | None = None,
+) -> list[State]:
     """Download and process datasets for requests with successful remote jobs.
 
     Only requests not yet processed locally are handled.
 
     Args:
         client (Client): An authenticated ECMWF Data Store client.
-        df (pd.DataFrame): The current request state dataframe to update with
+        states (list[State]): The current request states list to update with
             downloaded file paths and processing statuses.
         save_dir (Path): The directory to save the downloaded and processed datasets.
-        state_file (Path): The path to the request state file for saving updates.
-        update_file (str | None): The path to an existing file to update with new data.
+        state_file (Path): The path to the request states file for saving updates.
+        save_file (str | None): The name of an existing file in the save directory to update with new data.
+            If provided, any dates in the existing file will be skipped during downloading and processing.
 
     Returns:
-        pd.DataFrame: The updated request state dataframe with downloaded file paths and processing statuses.
+        list[State]: The updated request states list with downloaded file paths and processing statuses.
 
     """
-    existing_datetimes = _get_existing_datetimes(save_dir, update_file) if update_file is not None else None
-    if existing_datetimes is not None:
-        logger.info(f"Checking existing file {update_file} for already-downloaded dates to avoid duplicates...")
-        rows_to_skip = []
-        for i, row in df.iterrows():
-            dates = existing_datetimes.sel(time=slice(row["start_date"], row["end_date"]))
-            if len(dates) == 0:
-                continue
-            rows_to_skip.append(i)
-        if rows_to_skip:
-            logger.info(
-                f"Found existing data for {len(rows_to_skip)} requests in the provided update file. "
-                "These requests will be skipped during downloading and processing.",
-            )
-            df.loc[rows_to_skip, "local_status"] = LocalJobStatus.PROCESSED
-            _save_request_state(df, state_file)
+    if save_file is None:
+        save_file = f"era5_reanalysis_combined_{states[0]['start_date']}_{states[-1]['end_date']}.nc"
+        save_file_path = save_dir / save_file
+    else:
+        save_file_path = save_dir / save_file
 
     # iterate through requests and download/process those that are successful
-    for _, row in tqdm(df.iterrows(), desc="Downloading and processing ready requests", total=len(df)):
-        # skip rows that don't have a successful remote status or have already been processed locally
-        if row["remote_status"] != RemoteJobStatus.SUCCESSFUL or row["local_status"] == LocalJobStatus.PROCESSED:
+    processed_files: list[Path] = []
+    for state in tqdm(states, desc="Downloading and processing ready requests"):
+        # skip jobs that don't have a successful remote status or have already been processed locally
+        if state["remote_status"] != RemoteJobStatus.SUCCESSFUL or state["download_status"] == LocalJobStatus.PROCESSED:
             continue
 
-        # setup file names
-        raw_file = save_dir / f"era5_reanalysis_{row['start_date']}_{row['end_date']}_raw.nc"
-        processed_file = save_dir / f"era5_reanalysis_{row['start_date']}_{row['end_date']}.nc"
+        raw_file = _download_file(client, state, save_file_path)
+        processed_file = _process_file(state, raw_file, save_file_path)
+        processed_files.append(processed_file)
 
-        # download results if not already downloaded
-        if row["local_status"] == LocalJobStatus.PENDING:
-            remote = check_submitted_job(client, row["request_id"])
-            results = _retrieve_results(remote)
-            results.download(str(raw_file))
-            row["raw_file"] = str(raw_file)
-            row["local_status"] = LocalJobStatus.DOWNLOADED
-            row["error"] = None
+    _save_request_state(states, state_file)
 
-        # process data if downloaded but not yet processed
-        if row["local_status"] == LocalJobStatus.DOWNLOADED:
-            try:
-                process_data(raw_file, processed_file)
-                # remove raw file after processing
-                if raw_file.exists():
-                    raw_file.unlink()
-            # If anything goes wrong, mark local status as failed and log the error
-            # but do not raise so other requests can continue
-            except Exception as e:  # noqa: BLE001
-                logger.error(f"Error processing file for request ID {row['request_id']}: {e:s}")
-                row["local_status"] = LocalJobStatus.FAILED
-                row["error"] = str(e)
-                continue
-    _save_request_state(df, state_file)
-    return df
+    # this whole section feels fragile and a bit sloppy
+    # now combine analyzed files
+    # only get processed files that exist
+    processed_files = [f for f in processed_files if Path(f).exists()]
+    processed_ds = xr.open_mfdataset(processed_files, chunks="auto", compat="equals")
+
+    if save_file_path.exists():
+        # if a combined file already exists, try to add to it
+        existing_ds = xr.open_dataset(save_file_path)
+        ds = xr.merge([existing_ds, processed_ds], compat="equals", join="outer")
+        existing_ds.close()
+        ds.to_netcdf(save_file_path)
+        ds.close()
+    else:
+        # otherwise save all processed datasets as coombined file
+        processed_ds.to_netcdf(save_file_path)
+    processed_ds.close()
+
+    # now we can remove the individual processed datasets too
+    for f in processed_files:
+        if f.exists():
+            f.unlink()
+    return states
 
 
 def submit_era5(
     save_dir: Path | None = None,
-    start_datetime: str | None = None,
-    end_datetime: str | None = None,
-    new_request: bool = False,  # noqa: FBT001, FBT002
-    max_active_requests: int = DEFAULT_MAX_ACTIVE_REQUESTS,
+    start_date: str | None = None,
+    end_date: str | None = None,
 ) -> None:
     """Submit ERA5 remote jobs without downloading local files.
 
     Args:
         save_dir (Path | None): The directory to save the downloaded dataset.
             If None, defaults to a "data" directory at the package level.
-        start_datetime (str | None): The start datetime for the dataset in
+        start_date (str | None): The start date for the dataset in
             YYYY-MM-DD format. If None, defaults to the earliest available
-            datetime for the dataset.
-        end_datetime (str | None): The end datetime for the dataset in
+            date for the dataset.
+        end_date (str | None): The end date for the dataset in
             YYYY-MM-DD format. If None, defaults to the latest available
-            datetime for the dataset.
-        new_request (bool): Whether to start a new request and overwrite any existing request state file. Default False.
-        max_active_requests (int): Maximum number of active ECMWF requests to keep in flight.
+            date for the dataset.
 
     """
+    # handle default parameters
+    if start_date is None:
+        start_date = "2000-01-01"
+    if end_date is None:
+        end_date = datetime.datetime.now(tz=datetime.UTC).strftime("%Y-%m-%d")
+
     # setup client, request, and save directory
     client = login_to_ecmwf_datastore()
-    dataset, request = setup_request(start_datetime, end_datetime)
-    monthly_requests = monthly_jobs(request)
+    _delete_expired_requests(client)
     save_dir = create_data_dir(save_dir)
-    state_file = _request_state_path(save_dir)
-    poll_interval_seconds = DEFAULT_POLL_INTERVAL_SECONDS
+    state_file = _get_state_path(save_dir)
 
-    # get request state, either by building a new one or loading from an existing state file
-    if new_request or not state_file.exists():
-        df = _build_request_state(monthly_requests)
-        _save_request_state(df, state_file)
+    # get request states, either by building a new one or loading from an existing states file
+    start_dates, end_dates = monthly_jobs(start_date, end_date)
+    if state_file.exists():
+        states = _build_request_state(start_dates, end_dates)
+        _save_request_state(states, state_file)
     else:
-        df = _load_request_state(state_file, monthly_requests)
+        states = _load_request_state(state_file)
+        states = _update_request_state(states, state_file, start_dates, end_dates)
 
     # Check existing jobs to prefill request IDs and statuses for matching
     # recent jobs and avoid unnecessary duplicate submissions.
-    df, matched_existing_jobs = _prefill_submitted_requests_from_recent_jobs(
-        client=client,
-        monthly_requests=monthly_requests,
-        df=df,
-        state_file=state_file,
+    states, matched_existing_jobs = _prefill_submitted_requests_from_recent_jobs(
+        client,
+        states,
+        state_file,
     )
 
     # check how many remaining jobs we will have to submit and let the user know
-    remaining_to_submit = int(df["request_id"].eq("").sum())
+    remaining_to_submit = sum(1 for s in states if not s.get("request_id"))
     logger.info(
-        f"Prefill summary: using {matched_existing_jobs} existing jobs; submitting remaining {remaining_to_submit}.",
+        f"Using {matched_existing_jobs} existing jobs; submitting remaining {remaining_to_submit}.",
     )
 
     # check to see if the user will end up over 1000 requests before submitting any new jobs
     if not _under_total_jobs_limit(client, remaining_to_submit):
         # save and exit if user would be over the total jobs limit
-        _save_request_state(df, state_file)
+        _save_request_state(states, state_file)
         return
 
-    # If all requests already have IDs, they are already submitted, so exit
-    # early without starting the submission manager loop.
-    if not df["request_id"].eq("").any():
+    # If all requests already have IDs, they are already submitted
+    # exit early without starting the submission manager loop.
+    if all(s.get("request_id") for s in states):
         logger.info(
             "All requests are already submitted. View progress at "
             "https://cds.climate.copernicus.eu/requests. Run `uv run "
@@ -819,56 +935,17 @@ def submit_era5(
         return
 
     try:
-        logger.info("Starting ERA5 submission...")
-        logger.info(
-            f"Submission uses active-job cap {max_active_requests} (accepted + running). "
-            "If exited, run `uv run datasets.py era5 submit` later to resume.",
+        logger.info("Starting ERA5 submission. If exited, re-run the command to resume.")
+        states = _submit_requests(
+            client=client,
+            states=states,
+            state_file=state_file,
+            remaining_to_submit=remaining_to_submit,
+            matched_existing_jobs=matched_existing_jobs,
         )
 
-        with tqdm(total=len(df), desc="Submission progress") as progress:
-            progress.refresh()
-            while True:
-                # get pending, submitted, and active counts for progress bar
-                counts = _state_counts(df)
-
-                # update progress bar with counts
-                progress.n = counts["successful"]
-                progress.set_postfix(
-                    active=f"{counts['active']}/{max_active_requests}",
-                    pending=counts["pending"],
-                    refresh=False,
-                )
-                progress.refresh()
-
-                # break the loop if there are no pending requests left (all requests have been submitted)
-                if counts["pending"] == 0:
-                    break
-
-                # enforce active job cap by waiting to submit if we are at or above the max active requests limit
-                if counts["active"] >= max_active_requests:
-                    time.sleep(poll_interval_seconds)
-                    continue
-
-                # if we're under the active job cap, submit one pending request
-                df = _submit_one_pending_request(
-                    client=client,
-                    dataset=dataset,
-                    monthly_requests=monthly_requests,
-                    df=df,
-                    state_file=state_file,
-                )
-
-                # re-check immediately after each submit so we never exceed limit
-                active_after = _get_active_job_count(client)
-                if active_after >= max_active_requests:
-                    time.sleep(poll_interval_seconds)
-                    continue
-
-                # wait just a bit longer to be sure the newly submitted jobs have registered before we check again
-                time.sleep(poll_interval_seconds)
-
-        # all done, save request state and exit
-        _save_request_state(df, state_file)
+        # all done, save request states and exit
+        _save_request_state(states, state_file)
         logger.info(
             "All requests have been submitted. View progress at "
             "https://cds.climate.copernicus.eu/requests. Run `uv run "
@@ -876,8 +953,8 @@ def submit_era5(
             "download files.",
         )
     except KeyboardInterrupt:
-        # make sure request state is saved on interrupt
-        _save_request_state(df, state_file)
+        # make sure request states is saved on interrupt
+        _save_request_state(states, state_file)
         logger.warning(
             f"Submission interrupted. Progress saved to {state_file}. Run `uv run datasets.py era5 submit` to resume.",
         )
@@ -887,49 +964,50 @@ def submit_era5(
 
 def download_era5(
     save_dir: Path | None = None,
-    update_file: str | None = None,
+    save_file: str | None = None,
 ) -> None:
     """Download and process ERA5 files after all remote jobs are successful.
 
     Args:
         save_dir (Path | None): The directory to save the downloaded dataset.
             If None, defaults to a "data" directory at the package level.
-            There must be a request state file in this directory by running `uv run datasets.py era5 submit` first.
-        update_file (str | None): Path to an existing netCDF file to update. If None, a new file will be created.
+            There must be a request states file in this directory by running `uv run datasets.py era5 submit` first.
+        save_file (str | None): The name of an existing file in the save directory to update with new data.
+            If provided, any dates in the existing file will be skipped during downloading and processing.
 
 
     """
     # setup client and save directory
     client = login_to_ecmwf_datastore()
     save_dir = create_data_dir(save_dir)
-    state_file = _request_state_path(save_dir)
+    state_file = _get_state_path(save_dir)
 
     if not state_file.exists():
-        logger.warning(f"No request state found at {state_file}. Run `uv run datasets.py era5 submit` first.")
-    else:
-        df = _load_request_state_file(state_file)
+        logger.error(f"No request states found at {state_file}. Run `uv run datasets.py era5 submit` first.")
+        return
+
+    states = _load_request_state(state_file)
 
     # update and save remote statuses one last time before starting downloads, in case there have been any changes
-    df = _poll_remote_statuses(client, df, state_file)
-    _save_request_state(df, state_file)
-    # get counts of requests in each state category for logging
-    counts = _state_counts(df)
+    for request_id in [s.get("request_id") for s in states]:
+        if request_id is not None:
+            states = _update_status_for_submitted_request(client, states, state_file, request_id)
+    _save_request_state(states, state_file)
 
-    # check for any active remote jobs before starting downloads, and exit if there are still active jobs
-    if counts["active"] > 0:
-        logger.info(
-            f"Cannot start download yet, waiting on {counts['active']} active jobs. "
-            "Please check your CDS account at https://cds.climate.copernicus.eu/requests for more details. "
-            "Re-run this command once all jobs are completed to download the datasets.",
+    if any(s.get("remote_status") not in RemoteJobStatus.FINISHED for s in states):
+        logger.error(
+            "Not all requests are finished yet. Please wait for all requests to be successful before downloading. "
+            "View progress at https://cds.climate.copernicus.eu/requests "
+            "and run `uv run datasets.py era5 download` once all requests are ready.",
         )
-        _save_request_state(df, state_file)
         return
 
     # check for any failed remote jobs before starting downloads, and warn the user before downloading
     # but allow them to continue if they want to download any successful requests
-    if counts["remote_failed"] > 0:
+    if any(s.get("remote_status") == RemoteJobStatus.FAILED for s in states):
+        failed = sum(1 for s in states if s.get("remote_status") == RemoteJobStatus.FAILED)
         logger.warning(
-            f"{counts['remote_failed']} jobs failed or were cancelled on the CDS server."
+            f"{failed} jobs failed or were cancelled on the CDS server."
             "Please check your CDS account at https://cds.climate.copernicus.eu/requests for more details.",
         )
         if not click.confirm("Do you want to continue with downloading any successful requests?", default=True):
@@ -938,31 +1016,24 @@ def download_era5(
     try:
         logger.info("Starting ERA5 download...")
         # this function is where the actual downloading and processing happens, all the rest is just checks
-        df = _download_and_process_ready_requests(client, df, save_dir, state_file, update_file)
+        states = _download_and_process_ready_requests(client, states, save_dir, state_file, save_file)
 
-        counts = _state_counts(df)
-        _save_request_state(df, state_file)
-
-        # warn on any local failures, but still allow for successful downloads to be used
-        if counts["local_failed"] > 0:
-            logger.warning(
-                f"{counts['local_failed']} downloads failed. Fix the issue and rerun era5 download to resume.",
-            )
-            return
+        _save_request_state(states, state_file)
 
         # make sure they know everything is successful :)
-        if counts["processed"] == counts["total"]:
+        if all(s.get("processing_status") == LocalJobStatus.PROCESSED for s in states):
             logger.info("All downloads complete and processed successfully.")
             return
 
         logger.warning(
             "Unknown download issue; some months are not processed yet. "
             "Examine your CDS account at https://cds.climate.copernicus.eu/requests "
-            f"and the state file at {state_file} for more details.",
+            f"and the states file at {state_file} for more details.",
         )
+
     except KeyboardInterrupt:
-        _save_request_state(df, state_file)
-        # make sure request state is saved on interrupt
+        _save_request_state(states, state_file)
+        # make sure request states is saved on interrupt
         logger.warning(
             f"Download interrupted. Progress saved to {state_file}.  Run `uv run datasets.py era5 download` to resume.",
         )

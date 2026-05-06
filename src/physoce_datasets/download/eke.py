@@ -45,8 +45,8 @@ def login_to_copernicus_marine() -> None:
     logger.info("Login successful!")
 
 
-def create_data_dir(save_dir: Path | None) -> Path:
-    """Create the directory to save the downloaded dataset if it doesn't already exist.
+def get_data_dir(save_dir: Path | None) -> Path:
+    """Return the directory to save the downloaded dataset, creating it if it doesn't already exist.
 
     Args:
         save_dir (Path | None): The directory to save the downloaded dataset. If None,
@@ -95,12 +95,14 @@ def update_metadata(dataset: xr.Dataset) -> xr.Dataset:
     return dataset
 
 
-def get_save_file(save_dir: Path, dataset: xr.Dataset) -> Path:
+def get_save_file(save_dir: Path, dataset: xr.Dataset, save_file: str | None = None) -> Path:
     """Create the save file name and checks if the file already exists and is writable.
 
     Args:
         save_dir (Path): The directory to save the downloaded dataset.
         dataset (xr.Dataset): The dataset to be saved, used to extract the time coverage for the file name and metadata.
+        save_file (str | None): The filename to save the dataset to.
+            If None, defaults to a filename based on the dataset name and date range.
 
     Returns:
         Path: The file path to save the dataset to.
@@ -115,24 +117,29 @@ def get_save_file(save_dir: Path, dataset: xr.Dataset) -> Path:
     end_time = datetime.datetime.strptime(dataset.attrs["time_coverage_end"], "%Y-%m-%dT%H:%M:%SZ").astimezone(
         datetime.UTC,
     )
-    save_file = save_dir / f"copernicus_marine_eke_{start_time.strftime('%Y-%m-%d')}_{end_time.strftime('%Y-%m-%d')}.nc"
+    if save_file is None:
+        save_file_path = (
+            save_dir / f"copernicus_marine_eke_{start_time.strftime('%Y-%m-%d')}_{end_time.strftime('%Y-%m-%d')}.nc"
+        )
+    else:
+        save_file_path = save_dir / save_file
 
-    if save_file.exists() and not os.access(save_file, os.W_OK):
+    if save_file_path.exists() and not os.access(save_file_path, os.W_OK):
         msg = (
             f"File {save_file} already exists and is not writable. If this file "
             "is open in another application (e.g., Jupyter notebook), please "
             "close it and try again."
         )
         raise PermissionError(msg)
-    return save_file
+    return save_file_path
 
 
-def _get_existing_datetimes(save_dir: Path, update_path: str) -> xr.DataArray:
+def _get_existing_datetimes(save_dir: Path, update_path: Path) -> xr.DataArray:
     """Get the datetime values from the existing file.
 
     Args:
         save_dir (Path): The directory where the dataset files are saved.
-        update_path (str): The path to the existing file to update.
+        update_path (Path): The path to the existing file to update.
 
     Returns:
         xr.DataArray: The datetime values from the existing file.
@@ -168,9 +175,9 @@ def _merge_datasets(existing_ds: xr.Dataset, new_ds: xr.Dataset) -> xr.Dataset:
 
 def download_eke(
     save_dir: Path | None = None,
+    save_file: str | None = None,
     start_datetime: str | None = None,
     end_datetime: str | None = None,
-    update_file: str | None = None,
 ) -> None:
     """Download geostrophic velocities and compute eddy kinetic energy.
 
@@ -179,13 +186,14 @@ def download_eke(
     Args:
         save_dir (Path | None): The directory to save the downloaded dataset.
             If None, defaults to a "data" directory at the package level.
+        save_file (str | None): The filename to save the dataset to. If None,
+            defaults to a filename based on the dataset name and date range.
         start_datetime (str | None): The start datetime for the dataset in
             YYYY-MM-DD format. If None, defaults to the earliest available
             datetime for the dataset.
         end_datetime (str | None): The end datetime for the dataset in
             YYYY-MM-DD format. If None, defaults to the latest available
             datetime for the dataset.
-        update_file (str | None): The path to an existing netCDF file to update. If None, a new file will be created.
 
     """
     login_to_copernicus_marine()
@@ -212,10 +220,10 @@ def download_eke(
 
     dataset = update_metadata(dataset)
 
-    save_dir = create_data_dir(save_dir) if save_dir is None else save_dir
-    save_file = get_save_file(save_dir, dataset)
+    save_dir = get_data_dir(save_dir) if save_dir is None else save_dir
+    save_file_path = get_save_file(save_dir, dataset, save_file)
 
-    existing_datetimes = _get_existing_datetimes(save_dir, update_file) if update_file is not None else None
+    existing_datetimes = _get_existing_datetimes(save_dir, save_file_path) if save_file_path.exists() else None
 
     if existing_datetimes is not None:
         # drop any datetimes from the new dataset that are already in the existing file to avoid downloading duplicates
@@ -232,29 +240,31 @@ def download_eke(
                 category=UserWarning,
                 message="endian-ness of dtype and endian kwarg do not match, using endian kwar",
             )
-            if update_file is not None:
-                existing_ds = xr.open_dataset(save_dir / update_file)
+            if save_file_path.exists():
+                existing_ds = xr.open_dataset(save_file_path)
                 merged_ds = _merge_datasets(existing_ds, dataset)
                 merged_ds.to_netcdf(
-                    save_file,
+                    save_file_path,
                     mode="w",
                     format="NETCDF4",
                     engine="netcdf4",
                 )
-                logger.info(f"Existing dataset {update_file} merged with new data and saved to {save_file}.")
+
+                logger.info(f"Existing dataset {save_file_path} merged with new data and saved to {save_file_path}.")
                 existing_ds.close()
                 merged_ds.close()
-                if click.prompt("Do you want to delete the old file?", default=True):
-                    Path(save_dir / update_file).unlink()
-                    logger.info(f"Deleted old file at {update_file}.")
+
+                # delete the old file
+                save_file_path.unlink()
+                logger.info(f"Deleted old file at {save_file_path}.")
             else:
                 dataset.to_netcdf(
-                    save_file,
+                    save_file_path,
                     mode="w",
                     format="NETCDF4",
                     engine="netcdf4",
                 )
-        logger.info(f"Download complete. Dataset saved to {save_file}.")
+        logger.info(f"Download complete. Dataset saved to {save_file_path}.")
     else:
         logger.info("Download cancelled, exiting.")
 

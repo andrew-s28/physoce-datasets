@@ -15,6 +15,15 @@ save_dir_option = click.option(
         "to a 'data' directory in the current working directory."
     ),
 )
+save_file_option = click.option(
+    "--save-file",
+    type=str,
+    default=None,
+    help=(
+        "Filename to save the dataset. If not specified, defaults to a filename "
+        "based on the dataset name and date range (e.g., 'eke_2000-01-01_to_2020-12-31.nc')."
+    ),
+)
 start_datetime_option = click.option(
     "--start-date",
     type=str,
@@ -42,13 +51,6 @@ update_option = click.option(
         "the path to an existing netCDF file found in the directory specified by --save-dir (default './data')."
     ),
 )
-max_active_requests_option = click.option(
-    "--max-active-requests",
-    type=int,
-    default=10,
-    show_default=True,
-    help="Maximum queued ERA5 jobs allowed in your ECMWF account at once.",
-)
 
 
 @click.group(invoke_without_command=True)
@@ -66,8 +68,8 @@ def cli(ctx: click.Context) -> None:
 @save_dir_option
 @start_datetime_option
 @end_datetime_option
-@update_option
-def _eke(save_dir: Path | None, start_date: str | None, end_date: str | None, update_file: str | None) -> None:
+@save_file_option
+def _eke(save_dir: Path | None, start_date: str | None, end_date: str | None, save_file: str | None) -> None:
     """Download geostrophic velocities and compute eddy kinetic energy from Copernicus Marine Services.
 
     Args:
@@ -83,7 +85,7 @@ def _eke(save_dir: Path | None, start_date: str | None, end_date: str | None, up
         save_dir=save_dir,
         start_datetime=start_date,
         end_datetime=end_date,
-        update_file=update_file,
+        save_file=save_file,
     )
 
 
@@ -96,18 +98,10 @@ def _era5() -> None:
 @save_dir_option
 @start_datetime_option
 @end_datetime_option
-@max_active_requests_option
-@click.option(
-    "--new-request",
-    is_flag=True,
-    help="Whether to ignore any saved ERA5 queue state and start over with a fresh request set.",
-)
 def _era5_submit(
     save_dir: Path | None,
     start_date: str | None,
     end_date: str | None,
-    max_active_requests: int,
-    new_request: bool,  # noqa: FBT001
 ) -> None:
     """Submit ERA5 jobs only.
 
@@ -116,32 +110,31 @@ def _era5_submit(
             specified, defaults to a "data" directory in the current working directory.
         start_date (str | None): Start date for the dataset. Format should be YYYY-MM-DD.
         end_date (str | None): End date for the dataset. Format should be YYYY-MM-DD.
-        max_active_requests (int): Maximum number of queued ECMWF jobs allowed at once.
-        new_request (bool): If True, resets existing saved state and starts a fresh submission set.
 
     """
     submit_era5(
         save_dir=save_dir,
-        start_datetime=start_date,
-        end_datetime=end_date,
-        new_request=new_request,
-        max_active_requests=max_active_requests,
+        start_date=start_date,
+        end_date=end_date,
     )
 
 
 @_era5.command("download", help="Download and process ERA5 files after all remote jobs are successful.")
 @save_dir_option
-@update_option
-def _era5_download(save_dir: Path | None, update_file: str | None) -> None:
+@save_file_option
+def _era5_download(save_dir: Path | None, save_file: str | None) -> None:
     """Download ERA5 data for successful remote jobs and process locally.
 
     Args:
         save_dir (Path | None): Directory containing saved request state and output files.
-        update_file (str | None): Path to an existing netCDF file to update. If None, a new file will be created.
+                If not specified, defaults to a "data" directory in the current working directory.
+        save_file (str | None): Filename to save the dataset. If not specified, defaults to a filename
+            based on the dataset name and date range.
+
     """
     download_era5(
         save_dir=save_dir,
-        update_file=update_file,
+        save_file=save_file,
     )
 
 
