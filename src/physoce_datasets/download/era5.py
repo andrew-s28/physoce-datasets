@@ -20,13 +20,10 @@ from pycoare import coare_35
 from tqdm import tqdm
 
 from physoce_datasets.logging import logger
+from physoce_datasets.util import AreaDict, parse_area
 
 CONFIG_FILE = Path.home() / ".ecmwfdatastoresrc"
 
-MIN_LON = -150
-MAX_LON = -120
-MIN_LAT = 30
-MAX_LAT = 60
 REQUEST_STATE_FILE = "submitted_requests.json"
 MAX_ACTIVE_REQUESTS = 10
 POLL_INTERVAL_SECONDS = 1
@@ -41,7 +38,7 @@ class RequestParams(TypedDict):
     variable: list[str]
     date: str
     time: list[str]
-    area: list[int]
+    area: list[float]
     data_format: str
 
 
@@ -149,21 +146,6 @@ def create_data_dir(save_dir: Path | None) -> Path:
     return data_dir
 
 
-def check_submitted_job(client: Client, request_id: str) -> Remote:
-    """Check the status of a submitted job to the ECMWF Data Store.
-
-    Args:
-        client (ecmwf.datastores.Client): An instance of the ECMWF Data Store client.
-        request_id (str): The request ID for the submitted job.
-
-    Returns:
-        Remote: The remote job object.
-
-    """
-    remote = client.get_remote(request_id)
-    return remote
-
-
 def _retrieve_results(remote: Remote) -> Results:
     """Retrieve the results for a completed job from the ECMWF Data Store.
 
@@ -205,6 +187,7 @@ def process_data(input_file: Path, output_file: Path) -> Path:
     ds["t2m"] -= 273.15
     ds["d2m"] -= 273.15
     ds["sst"] -= 273.15
+    ds["latitude_broadcast"] = ds["latitude"].broadcast_like(ds["u10"])
     # we can expect warnings in the wind stress calc (e.g., when sst is nan, over land), so silence warnings
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", RuntimeWarning)
@@ -216,7 +199,8 @@ def process_data(input_file: Path, output_file: Path) -> Path:
             ds["d2m"],
             ds["sst"],
             ds["sp"],
-            input_core_dims=[["time"], ["time"], ["time"], ["time"], ["time"], ["time"]],
+            ds["latitude_broadcast"],
+            input_core_dims=[["time"], ["time"], ["time"], ["time"], ["time"], ["time"], ["time"]],
             output_core_dims=[["time"], ["time"]],
             vectorize=True,
         )
@@ -262,6 +246,7 @@ def compute_wind_stress(
     d2m: np.ndarray,
     sst: np.ndarray,
     sp: np.ndarray,
+    latitude: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Compute wind stress using standard ERA5 outputs and the COARE 3.5 bulk flux algorithm.
 
@@ -272,6 +257,7 @@ def compute_wind_stress(
         d2m (np.ndarray): 2m dewpoint temperature in degC.
         sst (np.ndarray): Sea surface temperature in degC.
         sp (np.ndarray): Surface pressure in Pa.
+        latitude (np.ndarray): Latitude coordinates.
 
     Returns:
         tuple[np.ndarray, np.ndarray]: A tuple containing the eastward and northward wind stress components in N/m^2.
@@ -286,7 +272,7 @@ def compute_wind_stress(
         rh=rh,
         ts=sst,
         p=sp / 100,  # convert to millibars for pycoare input, see also https://github.com/pyCOARE/coare/issues/57
-        lat=np.mean([MIN_LAT, MAX_LAT]),
+        lat=latitude,
         zu=10,
         zt=2,
         zq=2,
@@ -323,7 +309,7 @@ def monthly_jobs(start_date: str, end_date: str) -> tuple[list[str], list[str]]:
     return start_dates, end_dates
 
 
-def _create_requests(states: list[State]) -> list[State]:
+def _create_requests(states: list[State], area: AreaDict) -> list[State]:
     for s in states:
         if s["request"] is None:
             s["request"] = {
@@ -338,13 +324,13 @@ def _create_requests(states: list[State]) -> list[State]:
                 ],
                 "date": f"{s["start_date"]}/{s["end_date"]}",
                 "time": [f"{hour:02d}:00" for hour in range(0, 24, 1)],
-                "area": [MAX_LAT, MIN_LON, MIN_LAT, MAX_LON],
+                "area": [area["lat_max"], area["lon_min"], area["lat_min"], area["lon_max"]],
                 "data_format": "netcdf",
             }
     return states
 
 
-def _build_request_state(start_dates: list[str], end_dates: list[str]) -> list[State]:
+def _build_request_state(start_dates: list[str], end_dates: list[str], area: AreaDict) -> list[State]:
     states: list[State] = [
         {
             "start_date": s,
@@ -356,7 +342,7 @@ def _build_request_state(start_dates: list[str], end_dates: list[str]) -> list[S
             "request": None,
         } for s, e in zip(start_dates, end_dates, strict=True)
     ]
-    states = _create_requests(states)
+    states = _create_requests(states, area)
     return states
 
 
@@ -378,6 +364,7 @@ def _update_request_state(
     state_file: Path,
     start_dates: list[str],
     end_dates: list[str],
+    area: AreaDict,
 ) -> list[State]:
     """Update the request states with the new date range from the user.
 
@@ -386,6 +373,7 @@ def _update_request_state(
         state_file (Path): The path to the request states file for saving updates.
         start_dates (list[str]): The list of start dates for the new date range.
         end_dates (list[str]): The list of end dates for the new date range.
+        area (AreaDict): The dictionary of area coordinates.
 
     Returns:
         list[State]: The updated request states with any new date ranges added.
@@ -403,7 +391,7 @@ def _update_request_state(
                 "processing_status": None,
                 "request": None,
             })
-    states = _create_requests(states)
+    states = _create_requests(states, area)
     states.sort(key=operator.itemgetter("start_date"))
     _save_request_state(states, state_file)
     return states
@@ -759,10 +747,9 @@ def _download_file(client: Client, state: State, save_file_path: Path) -> Path:
         and state["remote_status"] == RemoteJobStatus.SUCCESSFUL
         and state["request_id"] is not None
     ):
-        remote = check_submitted_job(client, state["request_id"])
+        remote = client.get_remote(state["request_id"])
         results = _retrieve_results(remote)
         results.download(str(raw_file))
-        state["download_status"] = LocalJobStatus.DOWNLOADED
     return raw_file
 
 
@@ -785,7 +772,6 @@ def _process_file(state: State, raw_file: Path, save_file_path: Path) -> Path:
                 save_file_path.stem + f"_processed_{state['start_date']}_{state['end_date']}.nc",
             )
             process_data(raw_file, processed_file)
-            state["processing_status"] = LocalJobStatus.PROCESSED
             # remove raw file after processing
             if raw_file.exists():
                 raw_file.unlink()
@@ -793,7 +779,6 @@ def _process_file(state: State, raw_file: Path, save_file_path: Path) -> Path:
         # but do not raise so other requests can continue
         except Exception as e:  # noqa: BLE001
             logger.exception(f"Error processing file for request ID {state['request_id']}: {e}")
-            state["processing_status"] = LocalJobStatus.FAILED
     return processed_file
 
 
@@ -834,11 +819,23 @@ def _download_and_process_ready_requests(
         if state["remote_status"] != RemoteJobStatus.SUCCESSFUL or state["download_status"] == LocalJobStatus.PROCESSED:
             continue
 
-        raw_file = _download_file(client, state, save_file_path)
-        processed_file = _process_file(state, raw_file, save_file_path)
-        processed_files.append(processed_file)
+        try:
+            raw_file = _download_file(client, state, save_file_path)
+            state["download_status"] = LocalJobStatus.DOWNLOADED
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"Error downloading file for request ID {state['request_id']}: {e}")
+            state["download_status"] = LocalJobStatus.FAILED
+            continue
 
-    _save_request_state(states, state_file)
+        try:
+            processed_file = _process_file(state, raw_file, save_file_path)
+            state["processing_status"] = LocalJobStatus.PROCESSED
+            processed_files.append(processed_file)
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"Error processing file for request ID {state['request_id']}: {e}")
+            state["processing_status"] = LocalJobStatus.FAILED
+
+        _save_request_state(states, state_file)
 
     # this whole section feels fragile and a bit sloppy
     # now combine analyzed files
@@ -869,6 +866,7 @@ def submit_era5(
     save_dir: Path | None = None,
     start_date: str | None = None,
     end_date: str | None = None,
+    area_str: str | None = None,
 ) -> None:
     """Submit ERA5 remote jobs without downloading local files.
 
@@ -881,6 +879,8 @@ def submit_era5(
         end_date (str | None): The end date for the dataset in
             YYYY-MM-DD format. If None, defaults to the latest available
             date for the dataset.
+        area_str (str | None): The area to subset the dataset to, in the format "lat_min,lon_min,lat_max,lon_max".
+            If None, defaults to the full global extent.
 
     """
     # handle default parameters
@@ -888,6 +888,8 @@ def submit_era5(
         start_date = "2000-01-01"
     if end_date is None:
         end_date = datetime.datetime.now(tz=datetime.UTC).strftime("%Y-%m-%d")
+
+    area = parse_area(area_str)
 
     # setup client, request, and save directory
     client = login_to_ecmwf_datastore()
@@ -898,11 +900,11 @@ def submit_era5(
     # get request states, either by building a new one or loading from an existing states file
     start_dates, end_dates = monthly_jobs(start_date, end_date)
     if state_file.exists():
-        states = _build_request_state(start_dates, end_dates)
+        states = _build_request_state(start_dates, end_dates, area)
         _save_request_state(states, state_file)
     else:
         states = _load_request_state(state_file)
-        states = _update_request_state(states, state_file, start_dates, end_dates)
+        states = _update_request_state(states, state_file, start_dates, end_dates, area)
 
     # Check existing jobs to prefill request IDs and statuses for matching
     # recent jobs and avoid unnecessary duplicate submissions.
@@ -956,7 +958,7 @@ def submit_era5(
         # make sure request states is saved on interrupt
         _save_request_state(states, state_file)
         logger.warning(
-            f"Submission interrupted. Progress saved to {state_file}. Run `uv run datasets.py era5 submit` to resume.",
+            f"Submission interrupted. Progress saved to {state_file}. Re-run the command to resume.",
         )
         return
     return
@@ -1035,7 +1037,7 @@ def download_era5(
         _save_request_state(states, state_file)
         # make sure request states is saved on interrupt
         logger.warning(
-            f"Download interrupted. Progress saved to {state_file}.  Run `uv run datasets.py era5 download` to resume.",
+            f"Download interrupted. Progress saved to {state_file}. Re-run the command to resume.",
         )
         return
     return

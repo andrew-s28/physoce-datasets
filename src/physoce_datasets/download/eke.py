@@ -11,14 +11,10 @@ import copernicusmarine
 import xarray as xr
 
 from physoce_datasets.logging import logger
+from physoce_datasets.util import parse_area
 
 # supress info logging from copernicusmarine, will handle that ourselves
 logging.getLogger("copernicusmarine").setLevel(logging.WARNING)
-
-MIN_LON = -150
-MAX_LON = -120
-MIN_LAT = 30
-MAX_LAT = 60
 
 
 def login_to_copernicus_marine() -> None:
@@ -178,6 +174,7 @@ def download_eke(
     save_file: str | None = None,
     start_datetime: str | None = None,
     end_datetime: str | None = None,
+    area_str: str | None = None,
 ) -> None:
     """Download geostrophic velocities and compute eddy kinetic energy.
 
@@ -194,18 +191,22 @@ def download_eke(
         end_datetime (str | None): The end datetime for the dataset in
             YYYY-MM-DD format. If None, defaults to the latest available
             datetime for the dataset.
+        area_str (str | None): The area to subset the dataset to, in the format "lon_min,lon_max,lat_min,lat_max".
+            If None, defaults to the full global extent.
 
     """
     login_to_copernicus_marine()
+
+    area = parse_area(area_str)
 
     dataset = copernicusmarine.open_dataset(
         dataset_id="cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.125deg_P1D",
         start_datetime=start_datetime,
         end_datetime=end_datetime,
-        minimum_longitude=MIN_LON,
-        maximum_longitude=MAX_LON,
-        minimum_latitude=MIN_LAT,
-        maximum_latitude=MAX_LAT,
+        minimum_longitude=area["lon_min"],
+        maximum_longitude=area["lon_max"],
+        minimum_latitude=area["lat_min"],
+        maximum_latitude=area["lat_max"],
     )
 
     # drop unnecessary variables to save space

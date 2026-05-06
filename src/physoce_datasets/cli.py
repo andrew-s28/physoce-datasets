@@ -51,6 +51,15 @@ update_option = click.option(
         "the path to an existing netCDF file found in the directory specified by --save-dir (default './data')."
     ),
 )
+area_option = click.option(
+    "--area",
+    type=str,
+    default=None,
+    help=(
+        "Bounding box for the dataset in the format 'lon_min,lat_min,lon_max,lat_max'. "
+        "If not specified, defaults to global coverage."
+    ),
+)
 
 
 @click.group(invoke_without_command=True)
@@ -69,7 +78,14 @@ def cli(ctx: click.Context) -> None:
 @start_datetime_option
 @end_datetime_option
 @save_file_option
-def _eke(save_dir: Path | None, start_date: str | None, end_date: str | None, save_file: str | None) -> None:
+@area_option
+def _eke(
+    save_dir: Path | None,
+    start_date: str | None,
+    end_date: str | None,
+    save_file: str | None,
+    area_str: str | None,
+) -> None:
     """Download geostrophic velocities and compute eddy kinetic energy from Copernicus Marine Services.
 
     Args:
@@ -79,6 +95,10 @@ def _eke(save_dir: Path | None, start_date: str | None, end_date: str | None, sa
             If not specified, defaults to the earliest available date for the dataset.
         end_date (str | None): End date for the dataset. Format should be YYYY-MM-DD.
             If not specified, defaults to the latest available date for the dataset.
+        save_file (str | None): Filename to save the dataset. If not specified, defaults to a filename
+            based on the dataset name and date range (e.g., "eke_2000-01-01_to_2020-12-31.nc").
+        area (str | None): Bounding box for the dataset in the format 'lon_min,lat_min,lon_max,lat_max'.
+            If not specified, defaults to global coverage.
 
     """
     download_eke(
@@ -86,6 +106,7 @@ def _eke(save_dir: Path | None, start_date: str | None, end_date: str | None, sa
         start_datetime=start_date,
         end_datetime=end_date,
         save_file=save_file,
+        area_str=area_str,
     )
 
 
@@ -98,10 +119,12 @@ def _era5() -> None:
 @save_dir_option
 @start_datetime_option
 @end_datetime_option
+@area_option
 def _era5_submit(
     save_dir: Path | None,
     start_date: str | None,
     end_date: str | None,
+    area_str: str | None,
 ) -> None:
     """Submit ERA5 jobs only.
 
@@ -110,12 +133,15 @@ def _era5_submit(
             specified, defaults to a "data" directory in the current working directory.
         start_date (str | None): Start date for the dataset. Format should be YYYY-MM-DD.
         end_date (str | None): End date for the dataset. Format should be YYYY-MM-DD.
+        area_str (str | None): Bounding box for the dataset in the format 'lon_min,lat_min,lon_max,lat_max'.
+            If not specified, defaults to global coverage.
 
     """
     submit_era5(
         save_dir=save_dir,
         start_date=start_date,
         end_date=end_date,
+        area_str=area_str,
     )
 
 
