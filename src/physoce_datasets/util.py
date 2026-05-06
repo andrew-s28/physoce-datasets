@@ -1,3 +1,5 @@
+"""Utility functions for physoce_datasets."""
+
 from typing import TypedDict
 
 LON_MIN = -180
@@ -7,6 +9,8 @@ LAT_MAX = 90
 
 
 class AreaDict(TypedDict):
+    """A dictionary representing a geographic bounding box with longitude and latitude limits."""
+
     lon_min: float
     lon_max: float
     lat_min: float
@@ -48,11 +52,15 @@ def parse_area(area_str: str | None) -> AreaDict:
     # validate longitude and latitude values
     msg = ""
     if not LON_MIN <= lon_min <= lon_max <= LON_MAX:
-        msg += (f"Longitude values must be between {LON_MIN} and {LON_MAX}, "
-                f"with lon_min <= lon_max. Received: lon_min={lon_min}, lon_max={lon_max}. ")
+        msg += (
+            f"Longitude values must be between {LON_MIN} and {LON_MAX}, "
+            f"with lon_min <= lon_max. Received: lon_min={lon_min}, lon_max={lon_max}. "
+        )
     if not LAT_MIN <= lat_min <= lat_max <= LAT_MAX:
-        msg += (f"Latitude values must be between {LAT_MIN} and {LAT_MAX}, "
-                f"with lat_min <= lat_max. Received: lat_min={lat_min}, lat_max={lat_max}. ")
+        msg += (
+            f"Latitude values must be between {LAT_MIN} and {LAT_MAX}, "
+            f"with lat_min <= lat_max. Received: lat_min={lat_min}, lat_max={lat_max}. "
+        )
     if msg:
         raise ValueError(msg.strip())
 

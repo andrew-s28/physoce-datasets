@@ -1,3 +1,5 @@
+"""Functions for downloading and processing ERA5 reanalysis data from the ECMWF Data Store."""
+
 from __future__ import annotations
 
 import contextlib
@@ -34,6 +36,8 @@ type JobStatus = Literal["accepted", "running", "successful", "failed", "rejecte
 
 
 class RequestParams(TypedDict):
+    """The parameters for an ERA5 data request to the ECMWF Data Store API."""
+
     product_type: list[str]
     variable: list[str]
     date: str
@@ -43,6 +47,8 @@ class RequestParams(TypedDict):
 
 
 class RemoteParams(TypedDict):
+    """The parameters returned from a remote job using the ECMWF Data Store API."""
+
     jobID: str
     status: str
     created: str
@@ -53,6 +59,8 @@ class RemoteParams(TypedDict):
 
 
 class State(TypedDict):
+    """Internal state representation for tracking the status of ERA5 data requests and processing steps."""
+
     start_date: str
     end_date: str
     request_id: str | None
@@ -304,7 +312,7 @@ def monthly_jobs(start_date: str, end_date: str) -> tuple[list[str], list[str]]:
         current_end = (current_start + datetime.timedelta(days=32)).replace(day=1) - datetime.timedelta(days=1)
         current_end = min(current_end, end_date_dt)
         start_dates.append(f"{current_start.strftime('%Y-%m-%d')}")
-        end_dates.append(f"{current_end.strftime("%Y-%m-%d")}")
+        end_dates.append(f"{current_end.strftime('%Y-%m-%d')}")
         current_start = current_end + datetime.timedelta(days=1)
     return start_dates, end_dates
 
@@ -322,7 +330,7 @@ def _create_requests(states: list[State], area: AreaDict) -> list[State]:
                     "sea_surface_temperature",
                     "surface_pressure",
                 ],
-                "date": f"{s["start_date"]}/{s["end_date"]}",
+                "date": f"{s['start_date']}/{s['end_date']}",
                 "time": [f"{hour:02d}:00" for hour in range(0, 24, 1)],
                 "area": [area["lat_max"], area["lon_min"], area["lat_min"], area["lon_max"]],
                 "data_format": "netcdf",
@@ -340,7 +348,8 @@ def _build_request_state(start_dates: list[str], end_dates: list[str], area: Are
             "download_status": None,
             "processing_status": None,
             "request": None,
-        } for s, e in zip(start_dates, end_dates, strict=True)
+        }
+        for s, e in zip(start_dates, end_dates, strict=True)
     ]
     states = _create_requests(states, area)
     return states
@@ -382,15 +391,17 @@ def _update_request_state(
     existing_date_ranges = {(s["start_date"], s["end_date"]) for s in states}
     for start_date, end_date in zip(start_dates, end_dates, strict=True):
         if (start_date, end_date) not in existing_date_ranges:
-            states.append({
-                "start_date": start_date,
-                "end_date": end_date,
-                "request_id": None,
-                "remote_status": None,
-                "download_status": None,
-                "processing_status": None,
-                "request": None,
-            })
+            states.append(
+                {
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "request_id": None,
+                    "remote_status": None,
+                    "download_status": None,
+                    "processing_status": None,
+                    "request": None,
+                },
+            )
     states = _create_requests(states, area)
     states.sort(key=operator.itemgetter("start_date"))
     _save_request_state(states, state_file)
@@ -522,17 +533,11 @@ def _prefill_submitted_requests_from_recent_jobs(
         return states, 0
 
     # load all remotes from api, this is the step that takes the longest
-    remotes = [
-        client.get_remote(job.get("jobID")) for job in tqdm(jobs, desc="Fetching receipts for recent jobs")
-    ]
+    remotes = [client.get_remote(job.get("jobID")) for job in tqdm(jobs, desc="Fetching receipts for recent jobs")]
 
     # get requests and statuses for all existing jobs
-    existing_requests = {
-        remote.request_id: remote.request for remote in remotes
-    }
-    remote_status = {
-        remote.request_id: remote.status for remote in remotes
-    }
+    existing_requests = {remote.request_id: remote.request for remote in remotes}
+    remote_status = {remote.request_id: remote.status for remote in remotes}
 
     # build a lookup table of recent requests to receipts for quick matching against monthly requests
     lookup = {

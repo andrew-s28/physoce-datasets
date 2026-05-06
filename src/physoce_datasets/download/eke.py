@@ -1,3 +1,5 @@
+"""Functions for downloading and processing satellite altimetry data from Copernicus Marine."""
+
 from __future__ import annotations
 
 import datetime

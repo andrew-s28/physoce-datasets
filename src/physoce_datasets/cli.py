@@ -1,3 +1,5 @@
+"""CLI commands for physoce_datasets."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -97,7 +99,7 @@ def _eke(
             If not specified, defaults to the latest available date for the dataset.
         save_file (str | None): Filename to save the dataset. If not specified, defaults to a filename
             based on the dataset name and date range (e.g., "eke_2000-01-01_to_2020-12-31.nc").
-        area (str | None): Bounding box for the dataset in the format 'lon_min,lat_min,lon_max,lat_max'.
+        area_str (str | None): Bounding box for the dataset in the format 'lon_min,lat_min,lon_max,lat_max'.
             If not specified, defaults to global coverage.
 
     """

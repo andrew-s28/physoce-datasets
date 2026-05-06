@@ -12,6 +12,7 @@ dependencies = [
     "ecmwf-datastores-client>=0.5.1",
     "gcsfs>=2026.3.0",
     "h5py>=3.16.0",
+    "ipykernel>=7.2.0",
     "metpy>=1.7.1",
     "numpy>=2.4.4",
     "pycoare>=0.4.0",
@@ -23,9 +24,18 @@ dependencies = [
 notebook = ["ipykernel>=7.2.0", "matplotlib>=3.10.8"]
 
 [tool.ruff]
+include = ["src/**/*.py", "tests/**/*.py"]
 line-length = 120
+
+[tool.ruff.lint]
 select = ["ALL"]
-ignore = ["PD901", "RET504"]
+ignore = ["RET504", "D203", "D213", "COM812", "CPY001"]
+
+[tool.ruff.lint.flake8-builtins]
+builtins-allowed-modules = ["logging"]
+
+[tool.ruff.lint.pylint]
+max-args = 10
 
 [project.scripts]
 physoce-datasets = "physoce_datasets.cli:cli"
