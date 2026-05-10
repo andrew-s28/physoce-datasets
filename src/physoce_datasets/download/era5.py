@@ -809,7 +809,10 @@ def _download_and_process_ready_requests(
     processed_files: list[Path] = []
     for state in tqdm(states, desc="Downloading and processing ready requests"):
         # skip jobs that don't have a successful remote status or have already been processed locally
-        if state["remote_status"] != _RemoteJobStatus.SUCCESSFUL or state["download_status"] == _LocalJobStatus.PROCESSED:
+        if (
+            state["remote_status"] != _RemoteJobStatus.SUCCESSFUL
+            or state["download_status"] == _LocalJobStatus.PROCESSED
+        ):
             continue
 
         try:
