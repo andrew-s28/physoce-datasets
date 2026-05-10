@@ -1,6 +1,6 @@
 [project]
 name = "physoce-datasets"
-version = "0.1.0"
+dynamic = ["version"]
 description = "A Python package and CLI for downloading various physical oceanographic datasets."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -23,6 +23,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pre-commit>=4.6.0",
+    "pytest>=9.0.3",
 ]
 notebook = ["ipykernel>=7.2.0", "matplotlib>=3.10.8"]
 
@@ -65,9 +66,11 @@ max-args = 10
 physoce-datasets = "physoce_datasets.cli:cli"
 
 [build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling>=1.26.0", "hatch-vcs>=0.4.0"]
+build-backend = "hatchling.build"
 
-[tool.setuptools.packages.find]
-where = ["src"]
-include = ["*"]
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build]
+packages = ["src/physoce_datasets"]
