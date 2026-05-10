@@ -5,6 +5,6 @@ appropriate metadata.
 """
 
 from .eke import download_eke
-from .era5 import download_era5, submit_era5
+from .wind_stress import download_wind_stress, submit_wind_stress
 
-__all__ = ["download_eke", "download_era5", "submit_era5"]
+__all__ = ["download_eke", "download_wind_stress", "submit_wind_stress"]

@@ -858,7 +858,7 @@ def _download_and_process_ready_requests(
     return states
 
 
-def submit_era5(
+def submit_wind_stress(
     save_dir: Path | None = None,
     start_date: str | None = None,
     end_date: str | None = None,
@@ -960,16 +960,16 @@ def submit_era5(
     return
 
 
-def download_era5(
+def download_wind_stress(
     save_dir: Path | None = None,
     save_file: str | None = None,
 ) -> None:
-    """Download and process ERA5 files after all remote jobs are successful.
+    """Download and process wind stress files after all remote jobs are successful.
 
     Args:
         save_dir (Path | None): The directory to save the downloaded dataset.
             If None, defaults to a "data" directory at the package level.
-            There must be a request states file in this directory by running `uv run datasets.py era5 submit` first.
+            There must be a request states file in this directory by running `uv run datasets.py wind-stress` first.
         save_file (str | None): The name of an existing file in the save directory to update with new data.
             If provided, any dates in the existing file will be skipped during downloading and processing.
 
@@ -981,7 +981,7 @@ def download_era5(
     state_file = _get_state_path(save_dir)
 
     if not state_file.exists():
-        logger.error(f"No request states found at {state_file}. Run `uv run datasets.py era5 submit` first.")
+        logger.error(f"No request states found at {state_file}. Run `uv run datasets.py wind-stress submit` first.")
         return
 
     states = _load_request_state(state_file)
@@ -996,7 +996,7 @@ def download_era5(
         logger.error(
             "Not all requests are finished yet. Please wait for all requests to be successful before downloading. "
             "View progress at https://cds.climate.copernicus.eu/requests "
-            "and run `uv run datasets.py era5 download` once all requests are ready.",
+            "and run `uv run datasets.py wind-stress download` once all requests are ready.",
         )
         return
 

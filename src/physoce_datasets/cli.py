@@ -6,7 +6,7 @@ from pathlib import Path
 
 import click
 
-from .download import download_eke, download_era5, submit_era5
+from .download import download_eke, download_wind_stress, submit_wind_stress
 
 save_dir_option = click.option(
     "--save-dir",
@@ -112,57 +112,26 @@ def _eke(
     )
 
 
-@cli.group("era5", help="ERA5 workflow commands.")
-def _era5() -> None:
-    """ERA5 workflow commands group."""
-
-
-@_era5.command("submit", help="Submit ERA5 jobs until all requested months are queued.")
 @save_dir_option
 @start_datetime_option
 @end_datetime_option
 @area_option
-def _era5_submit(
+@cli.command("wind-stress", help="Download wind velocity and compute wind stress from ERA5.")
+def _wind_stress(
     save_dir: Path | None,
     start_date: str | None,
     end_date: str | None,
     area: str | None,
 ) -> None:
-    """Submit ERA5 jobs only.
-
-    Args:
-        save_dir (Path | None): Directory to save request state. If not
-            specified, defaults to a "data" directory in the current working directory.
-        start_date (str | None): Start date for the dataset. Format should be YYYY-MM-DD.
-        end_date (str | None): End date for the dataset. Format should be YYYY-MM-DD.
-        area (str | None): Bounding box for the dataset in the format 'lon_min,lat_min,lon_max,lat_max'.
-            If not specified, defaults to global coverage.
-
-    """
-    submit_era5(
+    """Download wind velocity and compute wind stress from ERA5."""
+    submit_wind_stress(
         save_dir=save_dir,
         start_date=start_date,
         end_date=end_date,
         area_str=area,
     )
-
-
-@_era5.command("download", help="Download and process ERA5 files after all remote jobs are successful.")
-@save_dir_option
-@save_file_option
-def _era5_download(save_dir: Path | None, save_file: str | None) -> None:
-    """Download ERA5 data for successful remote jobs and process locally.
-
-    Args:
-        save_dir (Path | None): Directory containing saved request state and output files.
-                If not specified, defaults to a "data" directory in the current working directory.
-        save_file (str | None): Filename to save the dataset. If not specified, defaults to a filename
-            based on the dataset name and date range.
-
-    """
-    download_era5(
+    download_wind_stress(
         save_dir=save_dir,
-        save_file=save_file,
     )
 
 
