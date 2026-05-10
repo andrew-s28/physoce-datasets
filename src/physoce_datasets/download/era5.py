@@ -32,10 +32,10 @@ POLL_INTERVAL_SECONDS = 1
 ECMWF_JOB_LIMIT = 1000
 DATASET = "reanalysis-era5-single-levels"
 
-type JobStatus = Literal["accepted", "running", "successful", "failed", "rejected"]
+type _JobStatus = Literal["accepted", "running", "successful", "failed", "rejected"]
 
 
-class RequestParams(TypedDict):
+class _RequestParams(TypedDict):
     """The parameters for an ERA5 data request to the ECMWF Data Store API."""
 
     product_type: list[str]
@@ -46,7 +46,7 @@ class RequestParams(TypedDict):
     data_format: str
 
 
-class RemoteParams(TypedDict):
+class _RemoteParams(TypedDict):
     """The parameters returned from a remote job using the ECMWF Data Store API."""
 
     jobID: str
@@ -58,7 +58,7 @@ class RemoteParams(TypedDict):
     metadata: dict
 
 
-class State(TypedDict):
+class _State(TypedDict):
     """Internal state representation for tracking the status of ERA5 data requests and processing steps."""
 
     start_date: str
@@ -67,26 +67,26 @@ class State(TypedDict):
     remote_status: str | None
     download_status: str | None
     processing_status: str | None
-    request: RequestParams | None
+    request: _RequestParams | None
 
 
-class RemoteJobStatus:
+class _RemoteJobStatus:
     """Remote job status categories for ECMWF Data Store jobs."""
 
-    ACCEPTED: Final[JobStatus] = "accepted"
-    RUNNING: Final[JobStatus] = "running"
-    SUCCESSFUL: Final[JobStatus] = "successful"
-    FAILED: Final[JobStatus] = "failed"
-    REJECTED: Final[JobStatus] = "rejected"
+    ACCEPTED: Final[_JobStatus] = "accepted"
+    RUNNING: Final[_JobStatus] = "running"
+    SUCCESSFUL: Final[_JobStatus] = "successful"
+    FAILED: Final[_JobStatus] = "failed"
+    REJECTED: Final[_JobStatus] = "rejected"
     UNKNOWN: Final[str] = "unknown"
 
-    ACTIVE: Final[tuple[JobStatus, ...]] = (ACCEPTED, RUNNING)
-    SAVED: Final[tuple[JobStatus, ...]] = (ACCEPTED, RUNNING, SUCCESSFUL, FAILED, REJECTED)
-    PREFILL: Final[tuple[JobStatus, ...]] = (SUCCESSFUL, ACCEPTED, RUNNING)
-    FINISHED: Final[tuple[JobStatus, ...]] = (SUCCESSFUL, FAILED, REJECTED)
+    ACTIVE: Final[tuple[_JobStatus, ...]] = (ACCEPTED, RUNNING)
+    SAVED: Final[tuple[_JobStatus, ...]] = (ACCEPTED, RUNNING, SUCCESSFUL, FAILED, REJECTED)
+    PREFILL: Final[tuple[_JobStatus, ...]] = (SUCCESSFUL, ACCEPTED, RUNNING)
+    FINISHED: Final[tuple[_JobStatus, ...]] = (SUCCESSFUL, FAILED, REJECTED)
 
 
-class LocalJobStatus:
+class _LocalJobStatus:
     """Local job status categories for tracking downloading and processing of ERA5 files."""
 
     PENDING = "pending"
@@ -137,7 +137,7 @@ def login_to_ecmwf_datastore() -> Client:
     return client
 
 
-def create_data_dir(save_dir: Path | None) -> Path:
+def _create_data_dir(save_dir: Path | None) -> Path:
     """Create the directory to save the downloaded dataset if it doesn't already exist.
 
     Args:
@@ -178,7 +178,7 @@ def _retrieve_results(remote: Remote) -> Results:
     return remote.get_results()
 
 
-def process_data(input_file: Path, output_file: Path) -> Path:
+def _process_data(input_file: Path, output_file: Path) -> Path:
     """Convert a downloaded hourly ERA5 month into a daily-mean NetCDF file.
 
     Args:
@@ -292,7 +292,7 @@ def compute_wind_stress(
     return tau_east, tau_north
 
 
-def monthly_jobs(start_date: str, end_date: str) -> tuple[list[str], list[str]]:
+def _split_monthly_jobs(start_date: str, end_date: str) -> tuple[list[str], list[str]]:
     """Split a request with a date range into multiple requests with monthly date ranges.
 
     Args:
@@ -317,7 +317,7 @@ def monthly_jobs(start_date: str, end_date: str) -> tuple[list[str], list[str]]:
     return start_dates, end_dates
 
 
-def _create_requests(states: list[State], area: AreaDict) -> list[State]:
+def _create_requests(states: list[_State], area: AreaDict) -> list[_State]:
     for s in states:
         if s["request"] is None:
             s["request"] = {
@@ -338,8 +338,8 @@ def _create_requests(states: list[State], area: AreaDict) -> list[State]:
     return states
 
 
-def _build_request_state(start_dates: list[str], end_dates: list[str], area: AreaDict) -> list[State]:
-    states: list[State] = [
+def _build_request_state(start_dates: list[str], end_dates: list[str], area: AreaDict) -> list[_State]:
+    states: list[_State] = [
         {
             "start_date": s,
             "end_date": e,
@@ -355,13 +355,13 @@ def _build_request_state(start_dates: list[str], end_dates: list[str], area: Are
     return states
 
 
-def _load_request_state(state_file: Path) -> list[State]:
+def _load_request_state(state_file: Path) -> list[_State]:
     with state_file.open() as f:
         states = json.load(f)
     return states
 
 
-def _save_request_state(states: list[State], state_file: Path) -> None:
+def _save_request_state(states: list[_State], state_file: Path) -> None:
     tmp_file = state_file.with_suffix(".tmp")
     with tmp_file.open("w") as f:
         json.dump(states, f, indent=4)
@@ -369,23 +369,23 @@ def _save_request_state(states: list[State], state_file: Path) -> None:
 
 
 def _update_request_state(
-    states: list[State],
+    states: list[_State],
     state_file: Path,
     start_dates: list[str],
     end_dates: list[str],
     area: AreaDict,
-) -> list[State]:
+) -> list[_State]:
     """Update the request states with the new date range from the user.
 
     Args:
-        states (list[State]): The current request states loaded from the states file.
+        states (list[_State]): The current request states loaded from the states file.
         state_file (Path): The path to the request states file for saving updates.
         start_dates (list[str]): The list of start dates for the new date range.
         end_dates (list[str]): The list of end dates for the new date range.
         area (AreaDict): The dictionary of area coordinates.
 
     Returns:
-        list[State]: The updated request states with any new date ranges added.
+        list[_State]: The updated request states with any new date ranges added.
 
     """
     existing_date_ranges = {(s["start_date"], s["end_date"]) for s in states}
@@ -412,7 +412,7 @@ def _delete_expired_requests(client: Client) -> None:
     jobs = client.get_jobs(
         ECMWF_JOB_LIMIT,
         sortby="-created",
-        status=RemoteJobStatus.SUCCESSFUL,
+        status=_RemoteJobStatus.SUCCESSFUL,
     ).json.get("jobs", [])
     expired_job_ids = [
         job.get("jobID") for job in jobs if job.get("metadata").get("results").get("type") == "results expired"
@@ -433,7 +433,7 @@ def _get_active_job_count(client: Client) -> int:
     jobs = client.get_jobs(
         ECMWF_JOB_LIMIT,
         sortby="-created",
-        status=list(RemoteJobStatus.ACTIVE),
+        status=list(_RemoteJobStatus.ACTIVE),
     ).json.get("jobs", [])
     return len(jobs)
 
@@ -452,7 +452,7 @@ def _under_total_jobs_limit(client: Client, number_to_submit: int) -> int:
     jobs = client.get_jobs(
         ECMWF_JOB_LIMIT,
         sortby="-created",
-        status=list(RemoteJobStatus.SAVED),
+        status=list(_RemoteJobStatus.SAVED),
     ).json.get("jobs", [])
     total_saved_jobs = len(jobs)
     projected_total_jobs = total_saved_jobs + number_to_submit
@@ -507,9 +507,9 @@ def _request_matches(receipt_request: dict, target_request: dict) -> bool:
 
 def _prefill_submitted_requests_from_recent_jobs(
     client: Client,
-    states: list[State],
+    states: list[_State],
     state_file: Path,
-) -> tuple[list[State], int]:
+) -> tuple[list[_State], int]:
     """Populate states rows from recent matching jobs to avoid duplicate submissions.
 
     Args:
@@ -525,7 +525,7 @@ def _prefill_submitted_requests_from_recent_jobs(
     jobs = client.get_jobs(
         100,  # number of recent jobs to check, 100 is ~30s for receipt retrieval
         sortby="-created",
-        status=list(RemoteJobStatus.PREFILL),
+        status=list(_RemoteJobStatus.PREFILL),
     ).json.get("jobs", [])
 
     # if there are no recent jobs, return early to avoid unnecessary receipt retrieval step
@@ -554,7 +554,7 @@ def _prefill_submitted_requests_from_recent_jobs(
     # iterate through monthly requests and fill in request_id and remote_status from lookup table when a match is found
     matched_existing_jobs = 0
     for s in states:
-        if s.get("remote_status") in RemoteJobStatus.FINISHED:
+        if s.get("remote_status") in _RemoteJobStatus.FINISHED:
             continue  # skip already finished jobs in states
         request = s.get("request")
         if request is None:
@@ -579,19 +579,19 @@ def _prefill_submitted_requests_from_recent_jobs(
 
 def _submit_one_pending_request(
     client: Client,
-    states: list[State],
+    states: list[_State],
     state_file: Path,
-) -> tuple[list[State], str]:
+) -> tuple[list[_State], str]:
     """Submit one pending request to the ECMWF Data Store and updates the request states dataframe accordingly.
 
     Args:
         client (Client): An authenticated ECMWF Data Store client.
         monthly_requests (list[dict]): The list of monthly request dictionaries to submit from.
-        states (list[State]): The current request states list to update with the submitted request ID and status.
+        states (list[_State]): The current request states list to update with the submitted request ID and status.
         state_file (Path): The path to the request states file for saving updates.
 
     Returns:
-        tuple[list[State], str]: The updated request states list and the submitted request ID.
+        tuple[list[_State], str]: The updated request states list and the submitted request ID.
 
     """
     # find the first index in the states where the request_id is None, meaning it has not been submitted yet
@@ -616,22 +616,22 @@ def _submit_one_pending_request(
 
 def _submit_requests(
     client: Client,
-    states: list[State],
+    states: list[_State],
     state_file: Path,
     remaining_to_submit: int,
     matched_existing_jobs: int,
-) -> list[State]:
+) -> list[_State]:
     """Submit pending requests to the ECMWF Data Store while enforcing active and total job caps.
 
     Args:
         client (Client): An authenticated ECMWF Data Store client.
-        states (list[State]): The current request states list to update with submitted request IDs and statuses.
+        states (list[_State]): The current request states list to update with submitted request IDs and statuses.
         state_file (Path): The path to the request states file for saving updates.
         remaining_to_submit (int): The number of requests that still need to be submitted.
         matched_existing_jobs (int): The number of requests that were pre-filled with existing jobs.
 
     Returns:
-        list[State]: The updated request states list with submitted request IDs and statuses.
+        list[_State]: The updated request states list with submitted request IDs and statuses.
 
     """
     submitted = 0
@@ -679,20 +679,20 @@ def _submit_requests(
 
 def _update_status_for_submitted_request(
     client: Client,
-    states: list[State],
+    states: list[_State],
     state_file: Path,
     request_id: str,
-) -> list[State]:
+) -> list[_State]:
     """Check the status of a submitted request and update the request states list accordingly.
 
     Args:
         client (Client): An authenticated ECMWF Data Store client.
-        states (list[State]): The current request states list to update with the latest remote statuses.
+        states (list[_State]): The current request states list to update with the latest remote statuses.
         state_file (Path): The path to the request states file for saving updates.
         request_id (str): The request ID for the submitted job to check the status of.
 
     Returns:
-        list[State]: The updated request states list with the latest remote statuses.
+        list[_State]: The updated request states list with the latest remote statuses.
 
     """
     s = next((s for s in states if s.get("request_id") == request_id), None)
@@ -729,12 +729,12 @@ def _get_existing_datetimes(save_dir: Path, update_path: str) -> xr.DataArray | 
     return datetime_existing
 
 
-def _download_file(client: Client, state: State, save_file_path: Path) -> Path:
+def _download_file(client: Client, state: _State, save_file_path: Path) -> Path:
     """Download the raw file for a completed request.
 
     Args:
         client (Client): An authenticated ECMWF Data Store client.
-        state (State): The request state for the job to download.
+        state (_State): The request state for the job to download.
         save_file_path (Path): The path to the file to save the downloaded data as.
 
     Returns:
@@ -748,8 +748,8 @@ def _download_file(client: Client, state: State, save_file_path: Path) -> Path:
 
     # download results if not already downloaded
     if (
-        state["download_status"] != LocalJobStatus.DOWNLOADED
-        and state["remote_status"] == RemoteJobStatus.SUCCESSFUL
+        state["download_status"] != _LocalJobStatus.DOWNLOADED
+        and state["remote_status"] == _RemoteJobStatus.SUCCESSFUL
         and state["request_id"] is not None
     ):
         remote = client.get_remote(state["request_id"])
@@ -758,11 +758,11 @@ def _download_file(client: Client, state: State, save_file_path: Path) -> Path:
     return raw_file
 
 
-def _process_file(state: State, raw_file: Path, save_file_path: Path) -> Path:
+def _process_file(state: _State, raw_file: Path, save_file_path: Path) -> Path:
     """Process a downloaded raw file into a cleaned daily-mean file.
 
     Args:
-        state (State): The request state for the job to process.
+        state (_State): The request state for the job to process.
         raw_file (Path): The path to the downloaded raw file.
         save_file_path (Path): The path to save the processed file as.
 
@@ -771,12 +771,12 @@ def _process_file(state: State, raw_file: Path, save_file_path: Path) -> Path:
 
     """
     # process data if downloaded but not yet processed
-    if state["download_status"] == LocalJobStatus.DOWNLOADED:
+    if state["download_status"] == _LocalJobStatus.DOWNLOADED:
         try:
             processed_file = save_file_path.with_name(
                 save_file_path.stem + f"_processed_{state['start_date']}_{state['end_date']}.nc",
             )
-            process_data(raw_file, processed_file)
+            _process_data(raw_file, processed_file)
             # remove raw file after processing
             if raw_file.exists():
                 raw_file.unlink()
@@ -789,18 +789,18 @@ def _process_file(state: State, raw_file: Path, save_file_path: Path) -> Path:
 
 def _download_and_process_ready_requests(
     client: Client,
-    states: list[State],
+    states: list[_State],
     save_dir: Path,
     state_file: Path,
     save_file: str | None = None,
-) -> list[State]:
+) -> list[_State]:
     """Download and process datasets for requests with successful remote jobs.
 
     Only requests not yet processed locally are handled.
 
     Args:
         client (Client): An authenticated ECMWF Data Store client.
-        states (list[State]): The current request states list to update with
+        states (list[_State]): The current request states list to update with
             downloaded file paths and processing statuses.
         save_dir (Path): The directory to save the downloaded and processed datasets.
         state_file (Path): The path to the request states file for saving updates.
@@ -808,7 +808,7 @@ def _download_and_process_ready_requests(
             If provided, any dates in the existing file will be skipped during downloading and processing.
 
     Returns:
-        list[State]: The updated request states list with downloaded file paths and processing statuses.
+        list[_State]: The updated request states list with downloaded file paths and processing statuses.
 
     """
     if save_file is None:
@@ -821,24 +821,24 @@ def _download_and_process_ready_requests(
     processed_files: list[Path] = []
     for state in tqdm(states, desc="Downloading and processing ready requests"):
         # skip jobs that don't have a successful remote status or have already been processed locally
-        if state["remote_status"] != RemoteJobStatus.SUCCESSFUL or state["download_status"] == LocalJobStatus.PROCESSED:
+        if state["remote_status"] != _RemoteJobStatus.SUCCESSFUL or state["download_status"] == _LocalJobStatus.PROCESSED:
             continue
 
         try:
             raw_file = _download_file(client, state, save_file_path)
-            state["download_status"] = LocalJobStatus.DOWNLOADED
+            state["download_status"] = _LocalJobStatus.DOWNLOADED
         except Exception as e:  # noqa: BLE001
             logger.error(f"Error downloading file for request ID {state['request_id']}: {e}")
-            state["download_status"] = LocalJobStatus.FAILED
+            state["download_status"] = _LocalJobStatus.FAILED
             continue
 
         try:
             processed_file = _process_file(state, raw_file, save_file_path)
-            state["processing_status"] = LocalJobStatus.PROCESSED
+            state["processing_status"] = _LocalJobStatus.PROCESSED
             processed_files.append(processed_file)
         except Exception as e:  # noqa: BLE001
             logger.error(f"Error processing file for request ID {state['request_id']}: {e}")
-            state["processing_status"] = LocalJobStatus.FAILED
+            state["processing_status"] = _LocalJobStatus.FAILED
 
         _save_request_state(states, state_file)
 
@@ -899,11 +899,11 @@ def submit_era5(
     # setup client, request, and save directory
     client = login_to_ecmwf_datastore()
     _delete_expired_requests(client)
-    save_dir = create_data_dir(save_dir)
+    save_dir = _create_data_dir(save_dir)
     state_file = _get_state_path(save_dir)
 
     # get request states, either by building a new one or loading from an existing states file
-    start_dates, end_dates = monthly_jobs(start_date, end_date)
+    start_dates, end_dates = _split_monthly_jobs(start_date, end_date)
     if not state_file.exists():
         states = _build_request_state(start_dates, end_dates, area)
         _save_request_state(states, state_file)
@@ -986,7 +986,7 @@ def download_era5(
     """
     # setup client and save directory
     client = login_to_ecmwf_datastore()
-    save_dir = create_data_dir(save_dir)
+    save_dir = _create_data_dir(save_dir)
     state_file = _get_state_path(save_dir)
 
     if not state_file.exists():
@@ -1001,7 +1001,7 @@ def download_era5(
             states = _update_status_for_submitted_request(client, states, state_file, request_id)
     _save_request_state(states, state_file)
 
-    if any(s.get("remote_status") not in RemoteJobStatus.FINISHED for s in states):
+    if any(s.get("remote_status") not in _RemoteJobStatus.FINISHED for s in states):
         logger.error(
             "Not all requests are finished yet. Please wait for all requests to be successful before downloading. "
             "View progress at https://cds.climate.copernicus.eu/requests "
@@ -1011,8 +1011,8 @@ def download_era5(
 
     # check for any failed remote jobs before starting downloads, and warn the user before downloading
     # but allow them to continue if they want to download any successful requests
-    if any(s.get("remote_status") == RemoteJobStatus.FAILED for s in states):
-        failed = sum(1 for s in states if s.get("remote_status") == RemoteJobStatus.FAILED)
+    if any(s.get("remote_status") == _RemoteJobStatus.FAILED for s in states):
+        failed = sum(1 for s in states if s.get("remote_status") == _RemoteJobStatus.FAILED)
         logger.warning(
             f"{failed} jobs failed or were cancelled on the CDS server."
             "Please check your CDS account at https://cds.climate.copernicus.eu/requests for more details.",
@@ -1028,7 +1028,7 @@ def download_era5(
         _save_request_state(states, state_file)
 
         # make sure they know everything is successful :)
-        if all(s.get("processing_status") == LocalJobStatus.PROCESSED for s in states):
+        if all(s.get("processing_status") == _LocalJobStatus.PROCESSED for s in states):
             logger.info("All downloads complete and processed successfully.")
             return
 
