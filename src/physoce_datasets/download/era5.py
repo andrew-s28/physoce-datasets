@@ -46,18 +46,6 @@ class _RequestParams(TypedDict):
     data_format: str
 
 
-class _RemoteParams(TypedDict):
-    """The parameters returned from a remote job using the ECMWF Data Store API."""
-
-    jobID: str
-    status: str
-    created: str
-    started: str
-    finished: str
-    updated: str
-    metadata: dict
-
-
 class _State(TypedDict):
     """Internal state representation for tracking the status of ERA5 data requests and processing steps."""
 
