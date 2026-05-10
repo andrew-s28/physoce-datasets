@@ -21,6 +21,9 @@ dependencies = [
 ]
 
 [dependency-groups]
+dev = [
+    "pre-commit>=4.6.0",
+]
 notebook = ["ipykernel>=7.2.0", "matplotlib>=3.10.8"]
 
 [tool.ruff]
@@ -29,7 +32,28 @@ line-length = 120
 
 [tool.ruff.lint]
 select = ["ALL"]
-ignore = ["RET504", "D203", "D213", "COM812", "CPY001"]
+ignore = [
+    "RET504",
+    "D203",
+    "D213",
+    "COM812",
+    "CPY001",
+    # don't use with ruff formatting as per https://docs.astral.sh/ruff/formatter/#conflicting-lint-rules
+    "W191",
+    "E111",
+    "E114",
+    "E117",
+    "D206",
+    "D300",
+    "Q000",
+    "Q001",
+    "Q002",
+    "Q003",
+    "Q004",
+    "COM812",
+    "COM819",
+    "E501",  # formatting should get this, but can sometimes allow long lines
+]
 
 [tool.ruff.lint.flake8-builtins]
 builtins-allowed-modules = ["logging"]
