@@ -768,7 +768,7 @@ class WindStressDownloader(_Downloader):
                 f"Download interrupted. Progress saved to {self.request_manager.state_file}. Re-run the command to resume.",
             )
             return
-        return
+        self.downloaded = True
 
     @staticmethod
     def _split_monthly_jobs(start_date: str, end_date: str) -> tuple[list[str], list[str]]:

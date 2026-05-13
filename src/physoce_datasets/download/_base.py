@@ -3,6 +3,8 @@ import os
 from abc import ABC, abstractmethod
 from pathlib import Path
 
+import xarray as xr
+
 from physoce_datasets.util import parse_area
 
 
@@ -38,6 +40,7 @@ class _Downloader(ABC):
         self.area = parse_area(area)
         self.save_dir = self._create_data_dir(save_dir)
         self.save_file = save_file
+        self.downloaded = False
 
     @staticmethod
     def _create_data_dir(save_dir: str | None) -> Path:
@@ -84,3 +87,28 @@ class _Downloader(ABC):
     @abstractmethod
     def download(self) -> None:
         """Download the dataset."""
+
+    def open_dataset(self, **kwargs: dict) -> xr.Dataset:
+        """Open the downloaded dataset as an xarray Dataset.
+
+        Args:
+            **kwargs: Additional keyword arguments to pass to `xr.open_dataset()`.
+
+        Returns:
+            xr.Dataset: The downloaded dataset as an xarray Dataset.
+
+        Raises:
+            ValueError: If the `save_file` attribute is not set.
+
+        """
+        if self.save_file is None:
+            msg = (
+                "Attribute `save_file` not set. If you're seeing this, it's probably an issue in the implementation of the downloader subclass. \n"
+                "Please consider opening an issue on GitHub to report this at https://github.com/andrew-s28/physoce-datasets/issues"
+            )
+            raise ValueError(msg)
+        if not self.downloaded:
+            msg = f"Dataset not downloaded. Please call the `{self.__class__.__name__}.download()` method first. If you've already called `download()`, there may have been an issue during the download process. "
+            raise ValueError(msg)
+        save_file_path = self._create_save_file(self.save_dir, self.save_file)
+        return xr.open_dataset(save_file_path, **kwargs)  # ty:ignore[invalid-argument-type]

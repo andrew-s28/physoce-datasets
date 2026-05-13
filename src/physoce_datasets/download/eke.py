@@ -218,3 +218,4 @@ class EKEDownloader(_Downloader):
                     engine="netcdf4",
                 )
             logger.info(f"Download complete. Dataset saved to {self.save_file_path}.")
+        self.downloaded = True

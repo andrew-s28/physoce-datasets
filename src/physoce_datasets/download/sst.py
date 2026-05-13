@@ -185,3 +185,4 @@ class SSTDownloader(_Downloader):
             # if we had to merge with an existing file that had a different name, we can remove the old file after saving the new merged file
             self.existing_path.unlink()
         logger.info(f"Dataset saved to {self.save_file_path}")
+        self.downloaded = True
