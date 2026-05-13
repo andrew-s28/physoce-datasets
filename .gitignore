@@ -1,6 +1,7 @@
 # ignore data files
 *.nc
 data/*
+test.ipynb
 
 # Python-generated files
 __pycache__/
