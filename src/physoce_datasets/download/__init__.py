@@ -4,7 +4,8 @@ This module also processes downloaded data into xarray Datasets with
 appropriate metadata.
 """
 
-from .eke import download_eke
-from .wind_stress import download_wind_stress, submit_wind_stress
+from .eke import EKEDownloader
+from .sst import SSTDownloader
+from .wind_stress import WindStressDownloader
 
-__all__ = ["download_eke", "download_wind_stress", "submit_wind_stress"]
+__all__ = ["EKEDownloader", "SSTDownloader", "WindStressDownloader"]

@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import click
 
-from .download import download_eke, download_wind_stress, submit_wind_stress
+from .download import EKEDownloader, SSTDownloader, WindStressDownloader
 
 save_dir_option = click.option(
     "--save-dir",
-    type=click.Path(file_okay=False, dir_okay=True, path_type=Path),
+    type=str,
     default=None,
     help=(
         "Directory to save the downloaded dataset. If not specified, defaults "
@@ -77,21 +75,21 @@ def cli(ctx: click.Context) -> None:
     help="Download geostrophic velocities and compute eddy kinetic energy from Copernicus Marine Services.",
 )
 @save_dir_option
+@save_file_option
 @start_datetime_option
 @end_datetime_option
-@save_file_option
 @area_option
 def _eke(
-    save_dir: Path | None,
+    save_dir: str | None,
+    save_file: str | None,
     start_date: str | None,
     end_date: str | None,
-    save_file: str | None,
     area: str | None,
 ) -> None:
     """Download geostrophic velocities and compute eddy kinetic energy from Copernicus Marine Services.
 
     Args:
-        save_dir (Path | None): Directory to save the downloaded dataset. If not specified,
+        save_dir (str | None): Directory to save the downloaded dataset. If not specified,
             defaults to a "data" directory in the current working directory.
         start_date (str | None): Start date for the dataset. Format should be YYYY-MM-DD.
             If not specified, defaults to the earliest available date for the dataset.
@@ -103,36 +101,62 @@ def _eke(
             If not specified, defaults to global coverage.
 
     """
-    download_eke(
+    downloader = EKEDownloader(
         save_dir=save_dir,
-        start_datetime=start_date,
-        end_datetime=end_date,
+        start_date=start_date,
+        end_date=end_date,
         save_file=save_file,
-        area_str=area,
+        area=area,
     )
+    downloader.download()
 
 
 @save_dir_option
+@save_file_option
+@start_datetime_option
+@end_datetime_option
+@area_option
+@cli.command("sst", help="Download NASA MUR SST datasets.")
+def _sst(
+    save_dir: str | None,
+    save_file: str | None,
+    start_date: str | None,
+    end_date: str | None,
+    area: str | None,
+) -> None:
+    """Download NASA MUR SST datasets."""
+    downloader = SSTDownloader(
+        save_dir=save_dir,
+        save_file=save_file,
+        start_date=start_date,
+        end_date=end_date,
+        area=area,
+    )
+    downloader.download()
+
+
+@save_dir_option
+@save_file_option
 @start_datetime_option
 @end_datetime_option
 @area_option
 @cli.command("wind-stress", help="Download wind velocity and compute wind stress from ERA5.")
 def _wind_stress(
-    save_dir: Path | None,
+    save_dir: str | None,
+    save_file: str | None,
     start_date: str | None,
     end_date: str | None,
     area: str | None,
 ) -> None:
     """Download wind velocity and compute wind stress from ERA5."""
-    submit_wind_stress(
+    downloader = WindStressDownloader(
         save_dir=save_dir,
+        save_file=save_file,
         start_date=start_date,
         end_date=end_date,
-        area_str=area,
+        area=area,
     )
-    download_wind_stress(
-        save_dir=save_dir,
-    )
+    downloader.download()
 
 
 if __name__ == "__main__":
