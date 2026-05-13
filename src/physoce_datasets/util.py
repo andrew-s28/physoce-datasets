@@ -70,3 +70,21 @@ def parse_area(area_str: str | None) -> AreaDict:
         "lat_min": lat_min,
         "lat_max": lat_max,
     }
+
+
+def get_area_str(area: AreaDict) -> str:
+    """Convert an AreaDict back into a string format for use in filenames.
+
+    Args:
+        area (AreaDict): An AreaDict TypedDict with keys 'lon_min', 'lon_max', 'lat_min', 'lat_max'.
+
+    Returns:
+        str: A string representing the bounding box in the format 'lon_min-lon_max_lat_min-lat_max', with longitude values suffixed by 'E' or 'W' and latitude values suffixed by 'N' or 'S'.
+
+    """
+    lon_min = f"{-area['lon_min']:.0f}W" if area["lon_min"] < 0 else f"{area['lon_min']:.0f}E"
+    lon_max = f"{-area['lon_max']:.0f}W" if area["lon_max"] < 0 else f"{area['lon_max']:.0f}E"
+    lat_min = f"{-area['lat_min']:.0f}S" if area["lat_min"] < 0 else f"{area['lat_min']:.0f}N"
+    lat_max = f"{-area['lat_max']:.0f}S" if area["lat_max"] < 0 else f"{area['lat_max']:.0f}N"
+
+    return f"{lon_min}-{lon_max}_{lat_min}-{lat_max}"

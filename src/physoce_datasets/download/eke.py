@@ -4,16 +4,20 @@ from __future__ import annotations
 
 import datetime
 import logging
-import os
 import warnings
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import click
 import copernicusmarine
 import xarray as xr
 
 from physoce_datasets.logging import logger
-from physoce_datasets.util import parse_area
+from physoce_datasets.util import get_area_str
+
+from ._base import _Downloader
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # supress info logging from copernicusmarine, will handle that ourselves
 logging.getLogger("copernicusmarine").setLevel(logging.WARNING)
@@ -41,23 +45,6 @@ def login_to_copernicus_marine() -> None:
         password = click.prompt("Enter your Copernicus Marine password", type=str, hide_input=True)
         copernicusmarine.login(username=username, password=password, force_overwrite=True)
     logger.info("Login successful!")
-
-
-def get_data_dir(save_dir: Path | None) -> Path:
-    """Return the directory to save the downloaded dataset, creating it if it doesn't already exist.
-
-    Args:
-        save_dir (Path | None): The directory to save the downloaded dataset. If None,
-            defaults to a "data" directory at the package level.
-
-    Returns:
-        Path: The directory to save the downloaded dataset.
-
-    """
-    # by default, save in a "data" directory at the package level
-    data_dir = Path("data") if save_dir is None else save_dir
-    data_dir.mkdir(exist_ok=True)
-    return data_dir
 
 
 def update_metadata(dataset: xr.Dataset) -> xr.Dataset:
@@ -93,146 +80,109 @@ def update_metadata(dataset: xr.Dataset) -> xr.Dataset:
     return dataset
 
 
-def get_save_file(save_dir: Path, dataset: xr.Dataset, save_file: str | None = None) -> Path:
-    """Create the save file name and checks if the file already exists and is writable.
+class EKEDownloader(_Downloader):
+    """Downloader for geostrophic surface eddy kinetic energy (EKE) data from AVISO data through Copernicus Marine."""
 
-    Args:
-        save_dir (Path): The directory to save the downloaded dataset.
-        dataset (xr.Dataset): The dataset to be saved, used to extract the time coverage for the file name and metadata.
-        save_file (str | None): The filename to save the dataset to.
-            If None, defaults to a filename based on the dataset name and date range.
+    def __init__(
+        self,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        area: str | None = None,
+        save_dir: str | None = None,
+        save_file: str | None = None,
+    ) -> None:
+        """Initialize the EKE downloader.
 
-    Returns:
-        Path: The file path to save the dataset to.
+        Args:
+            start_date (str | None): The start date for the dataset in "YYYY-MM-DD" format. If None, defaults to "2000-01-01".
+            end_date (str | None): The end date for the dataset in "YYYY-MM-DD" format. If None, defaults to the current date.
+            area (str | None): The area to download data for in "lon_min/lon_max/lat_min/lat_max" format. If None, defaults to global coverage.
+            save_dir (str | None): The directory to save the downloaded dataset. If None, defaults to a "data" directory in the current working directory.
+            save_file (str | None): The file name to save the downloaded dataset. If None, defaults to a name based on the dataset and date range.
 
-    Raises:
-        PermissionError: If the file already exists and is not writable.
+        """
+        super().__init__(start_date, end_date, area, save_dir, save_file)
 
-    """
-    start_time = datetime.datetime.strptime(dataset.attrs["time_coverage_start"], "%Y-%m-%dT%H:%M:%SZ").astimezone(
-        datetime.UTC,
-    )
-    end_time = datetime.datetime.strptime(dataset.attrs["time_coverage_end"], "%Y-%m-%dT%H:%M:%SZ").astimezone(
-        datetime.UTC,
-    )
-    if save_file is None:
-        save_file_path = (
-            save_dir / f"copernicus_marine_eke_{start_time.strftime('%Y-%m-%d')}_{end_time.strftime('%Y-%m-%d')}.nc"
+        login_to_copernicus_marine()
+
+        if save_file is None:
+            area_str = get_area_str(self.area)
+            save_file = f"copernicus_marine_eke_{self.start_date}_{self.end_date}_{area_str}.nc"
+        self.save_file_path = self._create_save_file(
+            self.save_dir,
+            save_file,
         )
-    else:
-        save_file_path = save_dir / save_file
+        self.existing_datetimes, self.existing_path = self._get_existing_datetimes()
 
-    if save_file_path.exists() and not os.access(save_file_path, os.W_OK):
-        msg = (
-            f"File {save_file} already exists and is not writable. If this file "
-            "is open in another application (e.g., Jupyter notebook), please "
-            "close it and try again."
+    def _get_existing_datetimes(self) -> tuple[xr.DataArray, Path] | tuple[None, None]:
+        """Get the datetime values from an existing file.
+
+        Returns:
+            tuple[xr.DataArray, pathlib.Path] | tuple[None, None]: The datetime values and file path from the existing file, or None if the file does not exist.
+
+        """
+        if not self.save_file_path.exists():
+            # check for any file in the save directory that matches the pattern of the expected file name if it was based on the date range and area
+            save_file_glob = self.save_dir.glob("copernicus_marine_eke_*.nc")
+            matching_files = list(save_file_glob)
+            if not matching_files:
+                return None, None
+            existing_path = matching_files[0]
+        else:
+            existing_path = self.save_file_path
+
+        ds_existing = xr.open_dataset(existing_path)
+        datetime_existing = ds_existing["time"]
+
+        return datetime_existing, existing_path
+
+    @staticmethod
+    def _merge_datasets(existing_ds: xr.Dataset, new_ds: xr.Dataset) -> xr.Dataset:
+        """Merge the existing dataset with the new dataset, ensuring no duplicate datetimes.
+
+        Args:
+            existing_ds (xr.Dataset): The existing dataset to update.
+            new_ds (xr.Dataset): The new dataset to merge with the existing dataset.
+
+        Returns:
+            xr.Dataset: The merged dataset containing all unique datetimes from both datasets.
+
+        """
+        merged_ds = xr.merge([existing_ds, new_ds], compat="no_conflicts", join="outer")
+        return merged_ds
+
+    def download(self) -> None:
+        """Download geostrophic velocities and compute eddy kinetic energy.
+
+        Saves the resulting dataset to a netCDF file.
+        """
+        dataset = copernicusmarine.open_dataset(
+            dataset_id="cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.125deg_P1D",
+            start_datetime=self.start_date,
+            end_datetime=self.end_date,
+            minimum_longitude=self.area["lon_min"],
+            maximum_longitude=self.area["lon_max"],
+            minimum_latitude=self.area["lat_min"],
+            maximum_latitude=self.area["lat_max"],
         )
-        raise PermissionError(msg)
-    return save_file_path
 
+        # drop unnecessary variables to save space
+        dataset = dataset.drop_vars(
+            ["flag_ice", "adt", "sla", "err_sla", "ugos", "vgos", "tpa_correction", "err_ugosa", "err_vgosa"],
+            errors="ignore",
+        )
 
-def _get_existing_datetimes(save_dir: Path, update_path: Path) -> xr.DataArray:
-    """Get the datetime values from the existing file.
+        # Calculate EKE based on guidance in:
+        # https://www.aviso.altimetry.fr/fileadmin/documents/data/tools/monthly_mean_eke_hdbk.pdf
+        dataset["eke"] = 1 / 2 * (dataset["ugosa"] ** 2 + dataset["vgosa"] ** 2)
 
-    Args:
-        save_dir (Path): The directory where the dataset files are saved.
-        update_path (Path): The path to the existing file to update.
+        dataset = update_metadata(dataset)
 
-    Returns:
-        xr.DataArray: The datetime values from the existing file.
+        if self.existing_datetimes is not None:
+            # drop any datetimes from the new dataset that are already in the existing file to avoid downloading duplicates
+            dataset = dataset.where(~dataset["time"].isin(self.existing_datetimes), drop=True)
 
-    Raises:
-        FileNotFoundError: If the update file does not exist in the save directory.
-
-    """
-    if not Path(save_dir / update_path).exists():
-        msg = f"Update file {update_path} not found in save directory {save_dir}."
-        raise FileNotFoundError(msg)
-
-    ds_existing = xr.open_dataset(save_dir / update_path)
-    datetime_existing = ds_existing["time"]
-
-    return datetime_existing
-
-
-def _merge_datasets(existing_ds: xr.Dataset, new_ds: xr.Dataset) -> xr.Dataset:
-    """Merge the existing dataset with the new dataset, ensuring no duplicate datetimes.
-
-    Args:
-        existing_ds (xr.Dataset): The existing dataset to update.
-        new_ds (xr.Dataset): The new dataset to merge with the existing dataset.
-
-    Returns:
-        xr.Dataset: The merged dataset containing all unique datetimes from both datasets.
-
-    """
-    merged_ds = xr.merge([existing_ds, new_ds], compat="no_conflicts", join="outer")
-    return merged_ds
-
-
-def download_eke(
-    save_dir: Path | None = None,
-    save_file: str | None = None,
-    start_datetime: str | None = None,
-    end_datetime: str | None = None,
-    area_str: str | None = None,
-) -> None:
-    """Download geostrophic velocities and compute eddy kinetic energy.
-
-    Saves the resulting dataset to a netCDF file.
-
-    Args:
-        save_dir (Path | None): The directory to save the downloaded dataset.
-            If None, defaults to a "data" directory at the package level.
-        save_file (str | None): The filename to save the dataset to. If None,
-            defaults to a filename based on the dataset name and date range.
-        start_datetime (str | None): The start datetime for the dataset in
-            YYYY-MM-DD format. If None, defaults to the earliest available
-            datetime for the dataset.
-        end_datetime (str | None): The end datetime for the dataset in
-            YYYY-MM-DD format. If None, defaults to the latest available
-            datetime for the dataset.
-        area_str (str | None): The area to subset the dataset to, in the format "lon_min,lon_max,lat_min,lat_max".
-            If None, defaults to the full global extent.
-
-    """
-    login_to_copernicus_marine()
-
-    area = parse_area(area_str)
-
-    dataset = copernicusmarine.open_dataset(
-        dataset_id="cmems_obs-sl_glo_phy-ssh_my_allsat-l4-duacs-0.125deg_P1D",
-        start_datetime=start_datetime,
-        end_datetime=end_datetime,
-        minimum_longitude=area["lon_min"],
-        maximum_longitude=area["lon_max"],
-        minimum_latitude=area["lat_min"],
-        maximum_latitude=area["lat_max"],
-    )
-
-    # drop unnecessary variables to save space
-    dataset = dataset.drop_vars(
-        ["flag_ice", "adt", "sla", "err_sla", "ugos", "vgos", "tpa_correction", "err_ugosa", "err_vgosa"],
-        errors="ignore",
-    )
-
-    # Calculate EKE based on guidance in:
-    # https://www.aviso.altimetry.fr/fileadmin/documents/data/tools/monthly_mean_eke_hdbk.pdf
-    dataset["eke"] = 1 / 2 * (dataset["ugosa"] ** 2 + dataset["vgosa"] ** 2)
-
-    dataset = update_metadata(dataset)
-
-    save_dir = get_data_dir(save_dir) if save_dir is None else save_dir
-    save_file_path = get_save_file(save_dir, dataset, save_file)
-
-    existing_datetimes = _get_existing_datetimes(save_dir, save_file_path) if save_file_path.exists() else None
-
-    if existing_datetimes is not None:
-        # drop any datetimes from the new dataset that are already in the existing file to avoid downloading duplicates
-        dataset = dataset.where(~dataset["time"].isin(existing_datetimes), drop=True)
-
-    if click.confirm(f"Downloading dataset with size {dataset.nbytes / 1e9:.2f} GB. Proceed?"):
+        logger.info(f"Downloading dataset with size {dataset.nbytes / 1e9:.2f} GB.")
         # strange warning being thrown by xarray when saving to netcdf4
         # seems to be related to endianness of the data and the netcdf4 engine
         # Suppress this warning since it doesn't seem to be causing any issues
@@ -243,34 +193,29 @@ def download_eke(
                 category=UserWarning,
                 message="endian-ness of dtype and endian kwarg do not match, using endian kwar",
             )
-            if save_file_path.exists():
-                existing_ds = xr.open_dataset(save_file_path)
-                merged_ds = _merge_datasets(existing_ds, dataset)
+            if self.existing_path is not None:
+                existing_ds = xr.open_dataset(self.existing_path)
+                merged_ds = self._merge_datasets(existing_ds, dataset)
                 merged_ds.to_netcdf(
-                    save_file_path,
+                    self.save_file_path,
                     mode="w",
                     format="NETCDF4",
                     engine="netcdf4",
                 )
 
-                logger.info(f"Existing dataset {save_file_path} merged with new data and saved to {save_file_path}.")
+                logger.info(f"Existing dataset {self.existing_path} merged with new data.")
                 existing_ds.close()
                 merged_ds.close()
 
                 # delete the old file
-                save_file_path.unlink()
-                logger.info(f"Deleted old file at {save_file_path}.")
+                if self.existing_path != self.save_file_path:
+                    self.existing_path.unlink()
             else:
                 dataset.to_netcdf(
-                    save_file_path,
+                    self.save_file_path,
                     mode="w",
                     format="NETCDF4",
                     engine="netcdf4",
                 )
-        logger.info(f"Download complete. Dataset saved to {save_file_path}.")
-    else:
-        logger.info("Download cancelled, exiting.")
-
-
-if __name__ == "__main__":
-    download_eke()
+            logger.info(f"Download complete. Dataset saved to {self.save_file_path}.")
+        self.downloaded = True
