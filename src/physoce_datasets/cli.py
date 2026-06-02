@@ -60,6 +60,15 @@ area_option = click.option(
         "If not specified, defaults to global coverage."
     ),
 )
+location_option = click.option(
+    "--location",
+    type=str,
+    default=None,
+    help=(
+        "Location for the dataset in the format 'lon,lat' (e.g., '132.0,36.55'). "
+        "If not specified, defaults to (0,0). This is a temporary option until the switch from area-based to point-based data access is fully implemented."
+    ),
+)
 
 
 @click.group(invoke_without_command=True)
@@ -111,12 +120,12 @@ def _eke(
     downloader.download()
 
 
+@cli.command("sst", help="Download NASA MUR SST datasets.")
 @save_dir_option
 @save_file_option
 @start_datetime_option
 @end_datetime_option
 @area_option
-@cli.command("sst", help="Download NASA MUR SST datasets.")
 def _sst(
     save_dir: str | None,
     save_file: str | None,
@@ -124,7 +133,21 @@ def _sst(
     end_date: str | None,
     area: str | None,
 ) -> None:
-    """Download NASA MUR SST datasets."""
+    """Download NASA MUR SST datasets.
+
+    Args:
+        save_dir (str | None): Directory to save the downloaded dataset. If not specified,
+            defaults to a "data" directory in the current working directory.
+        start_date (str | None): Start date for the dataset. Format should be YYYY-MM-DD.
+            If not specified, defaults to the earliest available date for the dataset.
+        end_date (str | None): End date for the dataset. Format should be YYYY-MM-DD.
+            If not specified, defaults to the latest available date for the dataset.
+        save_file (str | None): Filename to save the dataset. If not specified, defaults to a filename
+            based on the dataset name and date range (e.g., "eke_2000-01-01_to_2020-12-31.nc").
+        area (str | None): Bounding box for the dataset in the format 'lon_min,lat_min,lon_max,lat_max'.
+            If not specified, defaults to global coverage.
+
+    """
     downloader = SSTDownloader(
         save_dir=save_dir,
         save_file=save_file,
@@ -135,26 +158,44 @@ def _sst(
     downloader.download()
 
 
+@cli.command("wind-stress", help="Download wind velocity and compute wind stress from ERA5.")
 @save_dir_option
 @save_file_option
 @start_datetime_option
 @end_datetime_option
 @area_option
-@cli.command("wind-stress", help="Download wind velocity and compute wind stress from ERA5.")
+@location_option
 def _wind_stress(
     save_dir: str | None,
     save_file: str | None,
     start_date: str | None,
     end_date: str | None,
     area: str | None,
+    location: str | None,
 ) -> None:
-    """Download wind velocity and compute wind stress from ERA5."""
+    """Download wind velocity and compute wind stress from ERA5.
+
+    Args:
+        save_dir (str | None): Directory to save the downloaded dataset. If not specified,
+            defaults to a "data" directory in the current working directory.
+        start_date (str | None): Start date for the dataset. Format should be YYYY-MM-DD.
+            If not specified, defaults to the earliest available date for the dataset.
+        end_date (str | None): End date for the dataset. Format should be YYYY-MM-DD.
+            If not specified, defaults to the latest available date for the dataset.
+        save_file (str | None): Filename to save the dataset. If not specified, defaults to a filename
+            based on the dataset name and date range (e.g., "eke_2000-01-01_to_2020-12-31.nc").
+        area (str | None): Bounding box for the dataset in the format 'lon_min,lat_min,lon_max,lat_max'.
+            If not specified, defaults to global coverage. Unused currently and to be removed.
+        location (str | None): Location for the dataset in the format 'lon,lat' (e.g., '132.0,36.55'). Used instead of area.
+
+    """
     downloader = WindStressDownloader(
         save_dir=save_dir,
         save_file=save_file,
         start_date=start_date,
         end_date=end_date,
         area=area,
+        location=location,
     )
     downloader.download()
 
