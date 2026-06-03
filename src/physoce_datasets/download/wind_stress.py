@@ -19,7 +19,6 @@ from metpy.units import units
 from pycoare import coare_35
 
 from physoce_datasets.logging import logger
-from physoce_datasets.util import parse_location
 
 from ._base import _Downloader
 
@@ -80,35 +79,24 @@ class WindStressDownloader(_Downloader):
 
     def __init__(
         self,
+        location: str,
         start_date: str | None = None,
         end_date: str | None = None,
-        area: str | None = None,
         save_dir: str | None = None,
         save_file: str | None = None,
-        location: str
-        | None = None,  # converting to location based data access. will make the swap fully in a future PR
     ) -> None:
         """Initialize the downloader and set up the ECMWF Data Store client and request state manager."""
         super().__init__(
-            start_date=start_date,
-            end_date=end_date,
-            area=area,
+            location=location,
+            save_file_prefix="era5_reanalysis_wind_stress",
             save_dir=save_dir,
             save_file=save_file,
+            start_date=start_date,
+            end_date=end_date,
         )
-        self.location = (
-            parse_location(location) if location is not None else parse_location("0,0")
-        )  # again, a temp fix until switch from area to point is made
+
         self.client = login_to_ecmwf_datastore()
 
-        # if save_file is not provided, default to a file name based on the date range, otherwise use the provided file name
-        if save_file is None:
-            save_file = f"era5_reanalysis_combined_{self.start_date}_{self.end_date}_{self.location.file_name}.nc"
-        self.save_file_path = self._create_save_file(
-            self.save_dir,
-            save_file,
-        )
-        self.existing_datetimes = _get_existing_datetimes(self.save_dir, save_file)
         self.request = self.setup_request()
 
     def setup_request(self) -> dict:
@@ -148,7 +136,7 @@ class WindStressDownloader(_Downloader):
                 ds = self._process_data(ds)
                 ds.to_netcdf(self.save_file_path)
         zip_file_path.unlink()  # remove the zip file after processing
-        logger.info(f"Data successfully saved to {self.save_file_path}!")
+        logger.info(f"Download complete! Dataset saved to {self.save_file_path}")
 
     def _process_data(self, ds: xr.Dataset) -> xr.Dataset:
         """Compute wind stress from the downloaded ERA5 data and return a new dataset containing the wind stress variables.
@@ -295,11 +283,11 @@ class WindStressDownloader(_Downloader):
         existing_history = ds.attrs.pop("history", "")
         ds.attrs.update(
             {
-                "description": "Wind stress components computed from hourly ERA5 reanalysis data using the COARE 3.5 bulk flux algorithm and daily averaged. "
-                "last updated: " + datetime.now(UTC).isoformat(timespec="minutes"),
+                "description": "Wind stress components computed from hourly ERA5 reanalysis data using the COARE 3.5 bulk flux algorithm and daily averaged. ",
+                "last updated": datetime.now(UTC).isoformat(timespec="minutes"),
                 "history": existing_history
                 + "\n"
-                + f"{datetime.now(UTC).isoformat()} Downloaded and processed data using physoce-datasets (https://github.com/physoce/physoce-datasets)",
+                + f"{datetime.now(UTC).isoformat(timespec='minutes')} Downloaded and processed data using physoce-datasets (https://github.com/physoce/physoce-datasets)",
             },
         )
         return ds
@@ -366,23 +354,3 @@ class WindStressDownloader(_Downloader):
         tau_east = tau_mag * np.cos(angle)
         tau_north = tau_mag * np.sin(angle)
         return tau_east.reshape(shape), tau_north.reshape(shape)
-
-
-def _get_existing_datetimes(save_dir: Path, update_path: str) -> xr.DataArray | None:
-    """Get the datetime values from the existing file.
-
-    Args:
-        save_dir (Path): The directory where the dataset files are saved.
-        update_path (str): The path to the existing file to update.
-
-    Returns:
-        xr.DataArray: The datetime values from the existing file.
-
-    """
-    if not Path(save_dir / update_path).exists():
-        return None
-
-    ds_existing = xr.open_dataset(save_dir / update_path)
-    datetime_existing = ds_existing["time"].dt.date
-
-    return datetime_existing
