@@ -5,7 +5,7 @@ from pathlib import Path
 
 import xarray as xr
 
-from physoce_datasets.util import parse_area
+from physoce_datasets.util import parse_location
 
 
 class _Downloader(ABC):
@@ -13,20 +13,22 @@ class _Downloader(ABC):
 
     def __init__(
         self,
-        start_date: str | None = None,
-        end_date: str | None = None,
-        area: str | None = None,
+        location: str,
+        save_file_prefix: str,
         save_dir: str | None = None,
         save_file: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
     ) -> None:
         """Initialize the downloader.
 
         Args:
-            start_date (str | None): The start date for the dataset in "YYYY-MM-DD" format. If None, defaults to "2000-01-01".
-            end_date (str | None): The end date for the dataset in "YYYY-MM-DD" format. If None, defaults to the current date.
-            area (str | None): The area to download data for in "lon_min/lon_max/lat_min/lat_max" format. If None, defaults to global coverage.
+            location (str): Location for the dataset in the format 'lon,lat' (e.g., '132.0,36.55'). Required.
+            save_file_prefix (str): A prefix to add to the saved file name.
             save_dir (str | None): The directory to save the downloaded dataset. If None, defaults to a "data" directory in the current working directory.
             save_file (str | None): The file name to save the downloaded dataset. If None, defaults to a name based on the dataset and date range.
+            start_date (str | None): The start date for the dataset in "YYYY-MM-DD" format. If None, defaults to "2000-01-01".
+            end_date (str | None): The end date for the dataset in "YYYY-MM-DD" format. If None, defaults to the current date.
 
         """
         # handle default parameters
@@ -37,9 +39,12 @@ class _Downloader(ABC):
 
         self.start_date = start_date
         self.end_date = end_date
-        self.area = parse_area(area)
+        self.location = parse_location(location)
         self.save_dir = self._create_data_dir(save_dir)
+        if save_file is None:
+            save_file = f"{save_file_prefix}_{self.start_date}_{self.end_date}_{self.location.file_name}.nc"
         self.save_file = save_file
+        self.save_file_path = self._create_save_file(self.save_dir, self.save_file)
         self.downloaded = False
 
     @staticmethod

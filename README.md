@@ -2,7 +2,19 @@
 
 A Python package and command line interface aimed at standardizing the access of various oceanographic datasets and calculating derived parameters according to modern best practices.
 
-This package provides an *opinionated* interface which aims to simplify and align access to datasets across providing institutions (NASA, ECMWF, etc.); as such, it is aimed primarily at those looking for streamlined data access. If you are an expert user who wants a lot of control over the details of the download process, this may not be for you. However, if you are a user who is less concerned with learning lots of different APIs, all of which contain their own idiosyncratic details and limitations, but instead just want to get rolling with a dataset with as little friction as possible, this package is designed for you!
+> [!WARNING]
+> Due to issues with the [NASA Harmony API](https://forum.earthdata.nasa.gov/viewtopic.php?t=7954&sid=bdeec61e589c16e9d8642040d2fb01ff), the SST dataset is currently unavailable with an unknown fix timeline. Running any of the `sst` commands will fail with a `NotImplementedError` until this is fixed.
+
+## Why physoce-datasets?
+
+This package provides an *opinionated* interface which aims to simplify and align access to datasets across providing institutions (NASA, ECMWF, etc.); as such, it is aimed primarily at those looking for streamlined data access. If you are an expert user who wants a lot of control over the details of the download and analysis process, this may not be for you. However, if you want:
+
+- a unified command line and Python interface across datasets
+- expert-informed derived variables such as wind stress and eddy kinetic energy
+- long time series at a single or a few locations
+- the simplest downloading and opening process possible
+
+then this package is designed for you!
 
 ## Install
 
@@ -66,7 +78,7 @@ python physoce-datasets --help
 Available commands:
 
 - `eke`: Download altimetry-derived geostrophic velocities and compute eddy kinetic energy from Copernicus Marine Services.
-- `wind-stress`: Download ERA5 wind velocities and compute wind stress using the [COARE 3.5 algorithm](https://github.com/pyCOARE/coare). Please see the [notes on ERA5 downloads](#notes-for-era5-downloads) if using this command.
+- `wind-stress`: Download ERA5 wind velocities and compute wind stress using the [COARE 3.5 algorithm](https://github.com/pyCOARE/coare).
 - `sst`: Download NASA Multi-scale Ultra-high Resolution (MUR) sea surface temperature.
 
 Show command help:
@@ -79,11 +91,11 @@ uv run physoce-datasets eke --help
 
 All commands share the same base options:
 
+- `--location`: Location for the dataset in the format 'lon,lat' (e.g., '-132.0,36.55'). **Required for all commands!**
 - `--save-dir`: Directory where the dataset file is written. If not set, defaults to `.data/`, relative to the current working directory.
 - `--save-file`: File name to save the dataset. If not set, a default file name based on the data to be downloaded will be used.
 - `--start-date`: Start date in `YYYY-MM-DD` format. If not set, uses `2000-01-01`, or the earliest available date, whichever is later.
 - `--end-date`: End date in `YYYY-MM-DD` format. If not set, uses the current date or the latest available date, whicher is earlier.
-- `--area`: Area string with the format `lon_min,lon_max,lat_min,lat_max` (note commas and no spaces). If not set, defaults to global extent.
 
 ### Examples
 
@@ -110,9 +122,9 @@ from physoce_datasets import EKEDownloader
 
 # initialize the downloader
 eke_downloader = EKEDownloader(
+    location="-130,45",
     start_date="2020-01-01",
-    end_date="2020-01-31",
-    area="-140,-120,30,50",
+    end_date="2020-12-31",
     save_dir="data",
     save_file="eke.nc",
 )
@@ -134,28 +146,6 @@ import logging
 # supress info logging from physoce_datasets
 logging.getLogger("physoce_datasets").setLevel(logging.WARNING)
 ```
-
-Note that progress bars for downloads will still appear when they are available.
-
-## Efficiency
-
-This package aims to be as efficient as possible when downloading datasets, with the overall goal of sending the least amount of data over the network as possible.
-
-One of the biggest opportunities for this optimization is in the updating of existing datasets. When requesting a download and either specifying a file name that already exists or using the default file name, each download script will determine what data you already have downloaded and only make requests for the *additional* data necessary to fulfill your request. This is currently only implemented temporally - if you want to expand a spatial subset, you will have to recreate a full request. If at any point you'd like to force a complete re-download and overwrite any existing data, simply delete or move the existing data files in the download folder and re-run the script.
-
-In addition, as much processing as possible is put onto the data storage backends. For example, the NASA MUR SST dataset is re-chunked on the NASA servers and then only the requested subset is actually downloaded. The same is true for the Copernicus Marine EKE dataset. In other cases, this is not possible, such as the ECMWF wind stress data, since calculating wind stress requires the original hourly data. In order to not massively increase local storage, however, the wind stress calculation is done one month at a time, resampling to daily after it is completed for each dataset and removing the original data.
-
-## Notes for ERA5 Downloads
-
-ERA5 data is accesed through the [Copernicus Climate Data Store (CDS)](https://cds.climate.copernicus.eu). Accessing data through this interface comes with several constraints on request size and numbers which have to be managed when downloading data from the CDS.
-
-Notably, each user must submit "jobs" which are then processed one-by-one by the CDS backend. Each job has a maximum size based on the number of variables and areas. We require the original hourly data for calculating the wind stress (due to the non-linearity of the wind stress algorithm), which CDS recommends requesting no more than one month per job.
-
-In addition to per-request limits, I found that CDS will pre-cancel any job if more than ~100 are submitted per account at any given time. Therefore, this package manually delays the submission of jobs past the 100 job cap to prevent arbitrary cancellations. This submission process can take some time for large subsets.
-
-Since the submission and completion of jobs can take quite some time on the CDS backend, I wrote this package such that the user can exit the wind-stress program at any time and resume from where they left off. This is done by creating a "state file" (often `submitted_requests.json`) that is saved in the download directory. DO NOT DELETE THIS FILE!
-
-One should keep these limits in mind as they are requesting wind stress data. I wrote this package to manage as much of this as possible in the code, but if you run into issues it might be due to the CDS backend (i.e., not an issue in this code). If you run into issues, take a look at your [existing CDS requests](https://cds.climate.copernicus.eu/requests?tab=all) and see if there are reasons given for any cancellations.
 
 ## Contributions
 
