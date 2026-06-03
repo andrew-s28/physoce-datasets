@@ -78,6 +78,8 @@ class SSTDownloader(_Downloader):
             save_file (str | None): The file name to save the downloaded dataset. If None, defaults to a name based on the dataset and date range.
 
         """
+        msg = "The 'sst' downloader is not implemented yet due to issues with the NASA Harmony API."
+        raise NotImplementedError(msg)
         self.harmony_client = setup_earthdata_login_auth("urs.earthdata.nasa.gov")
         self.start_date = start_date if start_date is not None else "2000-01-01"
         self.end_date = (
