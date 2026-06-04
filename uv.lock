@@ -2454,6 +2454,7 @@ wheels = [
 name = "physoce-datasets"
 source = { editable = "." }
 dependencies = [
+    { name = "beautifulsoup4" },
     { name = "cdsapi" },
     { name = "cfgrib" },
     { name = "click" },
@@ -2483,6 +2484,7 @@ notebook = [
 
 [package.metadata]
 requires-dist = [
+    { name = "beautifulsoup4", specifier = ">=4.14.3" },
     { name = "cdsapi", specifier = ">=0.7.7" },
     { name = "cfgrib", specifier = ">=0.9.15.1" },
     { name = "click", specifier = ">=8.2.1" },

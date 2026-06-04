@@ -5,6 +5,7 @@ description = "A Python package and CLI for downloading various physical oceanog
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "beautifulsoup4>=4.14.3",
     "cdsapi>=0.7.7",
     "cfgrib>=0.9.15.1",
     "click>=8.2.1",

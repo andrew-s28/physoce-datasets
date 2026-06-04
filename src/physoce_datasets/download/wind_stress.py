@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
 from time import sleep
+from typing import TYPE_CHECKING, cast
 from zipfile import ZipFile
 
 import click
@@ -21,6 +22,9 @@ from pycoare import coare_35
 from physoce_datasets.logging import logger
 
 from ._base import _Downloader
+
+if TYPE_CHECKING:
+    from physoce_datasets.util import LonLat
 
 CONFIG_FILE = Path.home() / ".ecmwfdatastoresrc"
 
@@ -88,12 +92,14 @@ class WindStressDownloader(_Downloader):
         """Initialize the downloader and set up the ECMWF Data Store client and request state manager."""
         super().__init__(
             location=location,
+            location_type="lonlat",
             save_file_prefix="era5_reanalysis_wind_stress",
             save_dir=save_dir,
             save_file=save_file,
             start_date=start_date,
             end_date=end_date,
         )
+        self.location = cast("LonLat", self.location)
 
         self.client = login_to_ecmwf_datastore()
 
