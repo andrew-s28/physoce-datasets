@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import click
 
-from .download import EKEDownloader, WindStressDownloader
+from .download import EAMooringDownloader, EKEDownloader, WindStressDownloader
 
 save_dir_option = click.option(
     "--save-dir",
@@ -55,7 +55,9 @@ location_option = click.option(
     "--location",
     type=str,
     required=True,
-    help=("Location for the dataset in the format 'lon,lat' (e.g., '132.0,36.55'). Required."),
+    help=(
+        "Location for the dataset, either in the format 'lon,lat' (e.g., '132.0,36.55') for global datasets or as a site name (see sub-command documentation for available sites) for moored datasets. Required."
+    ),
 )
 
 
@@ -166,6 +168,58 @@ def _wind_stress(
 
     """
     downloader = WindStressDownloader(
+        location=location,
+        save_dir=save_dir,
+        save_file=save_file,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    downloader.download()
+
+
+@cli.command(
+    "ooi-ea-mooring",
+    help="""
+    Download moored OOI Endurance Array temperature, salinity, and density datasets.
+
+    Available sites for the --location argument include (case insensitive):\n
+    \t- 'CE01ISSM' (Oregon Inshore)\n
+    \t- 'CE02SHSM' (Oregon Shelf)\n
+    \t- 'CE04OSSM' (Oregon Offshore)\n
+    \t- 'CE06ISSM' (Washington Inshore)\n
+    \t- 'CE07SHSM' (Washington Shelf)\n
+    \t- 'CE09OSSM' (Washington Offshore)\n
+
+    Please see the OOI Endurance Array documentation for more information on these sites: https://oceanobservatories.org/array/coastal-endurance/.
+    """,
+)
+@location_option
+@save_dir_option
+@save_file_option
+@start_datetime_option
+@end_datetime_option
+def _ooi_ea_mooring(
+    location: str,
+    save_dir: str | None,
+    save_file: str | None,
+    start_date: str | None,
+    end_date: str | None,
+) -> None:
+    """Download moored OOI Endurance Array temperature, salinity, and density datasets.
+
+    Args:
+        location (str): Location for the dataset, either in the format 'lon,lat' (e.g., '132.0,36.55') for global datasets or as a site name (see sub-command documentation for available sites) for moored datasets.
+        save_dir (str | None): Directory to save the downloaded dataset. If not specified,
+            defaults to a "data" directory in the current working directory.
+        start_date (str | None): Start date for the dataset. Format should be YYYY-MM-DD.
+            If not specified, defaults to the earliest available date for the dataset.
+        end_date (str | None): End date for the dataset. Format should be YYYY-MM-DD.
+            If not specified, defaults to the latest available date for the dataset.
+        save_file (str | None): Filename to save the dataset. If not specified, defaults to a filename
+            based on the dataset name and date range (e.g., "ooi_ea_mooring_2000-01-01_to_2020-12-31.nc").
+
+    """
+    downloader = EAMooringDownloader(
         location=location,
         save_dir=save_dir,
         save_file=save_file,

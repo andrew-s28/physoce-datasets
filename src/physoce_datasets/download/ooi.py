@@ -5,6 +5,7 @@ import re
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, cast
 
+import gsw
 import requests
 import xarray as xr
 from bs4 import BeautifulSoup
@@ -16,6 +17,54 @@ from ._base import _Downloader
 
 if TYPE_CHECKING:
     from physoce_datasets.util import OOISite
+
+# variables to drop from OOI EA CTD datasets, used in processing after download
+VARIABLES_TO_DROP = [
+    "obs",
+    # these times should all be the same as the time dimension
+    "driver_timestamp",
+    "ctd_time",
+    "internal_timestamp",
+    "ingestion_timestamp",
+    "port_timestamp",
+    "preferred_timestamp",
+    "id",
+    # don't need conductivity
+    "conductivity",
+    "sea_water_electrical_conductivity",
+    # will calculate density ourselves
+    "density",
+    "sea_water_density",
+    # qc executed
+    "pressure_qc_executed",
+    "conductivity_qc_executed",
+    "sea_water_pressure_qc_executed",
+    "sea_water_electrical_conductivity_qc_executed",
+    "sea_water_practical_salinity_qc_executed",
+    "sea_water_temperature_qc_executed",
+    "sea_water_density_qc_executed",
+    # qc results
+    "pressure_qc_results",
+    "sea_water_electrical_conductivity_qc_resultssea_water_practical_salinity_qc_results",
+    "sea_water_temperature_qc_results",
+    "sea_water_density_qc_results",
+    # qartod results
+    "sea_water_pressure_qartod_results",
+    "sea_water_electrical_conductivity_qartod_results",
+    "sea_water_practical_salinity_qartod_results",
+    "sea_water_temperature_qartod_results",
+    # qartod executed
+    "sea_water_pressure_qartod_executed",
+    "sea_water_electrical_conductivity_qartod_executed",
+    "sea_water_practical_salinity_qartod_executed",
+    "sea_water_temperature_qartod_executed",
+    # unproccessed L0 variables
+    "conductivity",
+    "temperature",
+    "provenance",
+    # unprocessed temperature from the pressure sensor, used by OOI to calculate output params but not necessary here
+    "pressure_temp",
+]
 
 
 class EAMooringDownloader(_Downloader):
@@ -111,12 +160,107 @@ class EAMooringDownloader(_Downloader):
         nc_files = self._filter_dates(nc_files)
         return nc_files
 
+    @staticmethod
+    def _update_metadata(ds: xr.Dataset) -> xr.Dataset:
+        """Update the metadata of the OOI EA dataset to be CF-compliant and include necessary attributes.
+
+        Args:
+            ds (xr.Dataset): The xarray Dataset containing the OOI EA data.
+
+        Returns:
+            xr.Dataset: The xarray Dataset with updated metadata.
+
+        """
+        ds["sea_water_pressure"].attrs.update(
+            {
+                "long_name": "Sea Water Pressure",
+                "standard_name": "sea_water_pressure",
+                "units": "dbar",
+            }
+        )
+        ds["sea_water_temperature"].attrs.update(
+            {
+                "long_name": "Sea Water Temperature",
+                "standard_name": "sea_water_temperature",
+                "units": "degree_C",
+            }
+        )
+        ds["sea_water_practical_salinity"].attrs.update(
+            {
+                "long_name": "Sea Water Practical Salinity",
+                "standard_name": "sea_water_practical_salinity",
+                "units": "dimensionless",
+            }
+        )
+        ds["sea_water_absolute_salinity"].attrs.update(
+            {
+                "long_name": "Sea Water Absolute Salinity",
+                "standard_name": "sea_water_absolute_salinity",
+                "units": "g/kg",
+            }
+        )
+        ds["sea_water_conservative_temperature"].attrs.update(
+            {
+                "long_name": "Sea Water Conservative Temperature",
+                "standard_name": "sea_water_conservative_temperature",
+                "units": "degree_C",
+            }
+        )
+        ds["sea_water_density"].attrs.update(
+            {
+                "long_name": "Sea Water Density",
+                "standard_name": "sea_water_density",
+                "units": "kg/m^3",
+            }
+        )
+        existing_history = ds.attrs.pop("history", "")
+        ds.attrs.update(
+            {
+                "description": "CTD data from OOI Endurance Array surface moorings, obtained via the OOI THREDDS catalog. This dataset includes processed variables such as absolute salinity, conservative temperature, and density calculated from the L2 derived variables of practical salinity, temperature, and pressure provided from OOI.",
+                "last updated": datetime.now(UTC).isoformat(timespec="minutes"),
+                "history": existing_history
+                + "\n"
+                + f"{datetime.now(UTC).isoformat(timespec='minutes')} Downloaded and processed data using physoce-datasets (https://github.com/physoce/physoce-datasets)",
+                "time_coverage_start": ds["time"].min().dt.strftime("%Y-%m-%dT%H:%M:%SZ").item(),
+                "time_coverage_end": ds["time"].max().dt.strftime("%Y-%m-%dT%H:%M:%SZ").item(),
+            },
+        )
+        return ds
+
+    def _process(self, ds: xr.Dataset) -> xr.Dataset:
+        """Process the raw OOI EA dataset by calculating density and adding metadata.
+
+        Args:
+            ds (xr.Dataset): The raw xarray Dataset containing the OOI EA data.
+
+        Returns:
+            xr.Dataset: The processed xarray Dataset with calculated density and added metadata.
+
+        """
+        ds = ds.swap_dims({"obs": "time"})
+        ds = ds.drop_vars(VARIABLES_TO_DROP, errors="ignore")
+
+        ds["sea_water_absolute_salinity"] = gsw.SA_from_SP(
+            ds["sea_water_practical_salinity"], ds["sea_water_pressure"], self.location.lon, self.location.lat
+        )
+        ds["sea_water_conservative_temperature"] = gsw.CT_from_t(
+            ds["sea_water_temperature"], ds["sea_water_pressure"], ds["sea_water_absolute_salinity"]
+        )
+        ds["sea_water_density"] = gsw.rho(
+            ds["sea_water_absolute_salinity"], ds["sea_water_conservative_temperature"], ds["sea_water_pressure"]
+        )
+
+        # take daily mean
+        ds = ds.resample(time="1D").mean()
+
+        return ds
+
     def download(self) -> None:
         """Download the netCDF data files from the THREDDS catalog and save them to a local directory."""
         logger.info(f"Getting list of data files for {self.location}...")
         nc_files = self._list_files(self.search_url, self.tag)
         if not nc_files:
-            logger.warning(f"No files found for {self.location} in the specified date range.")
+            logger.warning(f"No files found for {self.location} in the specified date range. Exiting download.")
             return
         download_urls = [self.base_url + f + "#mode=bytes" for f in nc_files]
 
@@ -128,11 +272,14 @@ class EAMooringDownloader(_Downloader):
                 ds.append(xr.open_dataset(io.BytesIO(r.content)))
                 ds[i].load()
 
-        ds_merged = xr.merge(ds)
+        ds = [self._process(di) for di in ds]
+        ds_merged = xr.merge(ds, compat="no_conflicts", join="outer")
         ds_merged = ds_merged.sortby("time")  # ensure data is sorted by time after merging
         ds_merged = ds_merged.sel(
             time=slice(self.start_date, self.end_date)
         )  # subset to specified date range after merging
+        ds_merged = ds_merged.assign_coords({"latitude": self.location.lat, "longitude": self.location.lon})
+        ds_merged = self._update_metadata(ds_merged)
 
         ds_merged.to_netcdf(self.save_file_path)
         logger.info(f"Download complete! Dataset saved to {self.save_file_path}")

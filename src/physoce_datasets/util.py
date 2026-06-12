@@ -21,7 +21,7 @@ class OOISiteInfo(TypedDict):
 
 OOI_SITES_INFO: dict[str, OOISiteInfo] = {
     "ce01issm": {
-        "refdes": "CE01ISSM-RID16-01-CTDBPC000",
+        "refdes": "CE01ISSM-RID16-03-CTDBPC000",
         "method": "recovered_inst",
         "instrument": "ctdbp_cdef_instrument_recovered",
         "short_name": "CTD",
@@ -45,7 +45,7 @@ OOI_SITES_INFO: dict[str, OOISiteInfo] = {
         "lon": -124.956,
     },
     "ce06issm": {
-        "refdes": "CE06ISSM-RID16-01-CTDBPC000",
+        "refdes": "CE06ISSM-RID16-03-CTDBPC000",
         "method": "recovered_inst",
         "instrument": "ctdbp_cdef_instrument_recovered",
         "short_name": "CTD",
@@ -200,7 +200,7 @@ class OOISite:
 
         """
         if self.site not in OOI_SITES_INFO:
-            msg = f"Invalid site identifier: '{self.site}'. Must be one of the following: {', '.join(OOI_SITES_INFO.keys())}."
+            msg = f"Invalid site identifier: '{self.site}'. Must be one of the following (case insensitive): {', '.join(OOI_SITES_INFO.keys())}."
             raise ValueError(msg)
 
     def __repr__(self) -> str:
@@ -224,7 +224,7 @@ class OOISite:
             str: A string representation of the OOISite in the format 'OOISite(site=..., short_name=..., refdes=..., method=..., instrument=..., latitude=..., longitude=...)'.
 
         """
-        return self.__repr__()
+        return f"OOI EA Site {self.site.upper()} {self.short_name}"
 
     @property
     def search_url(self) -> str:
