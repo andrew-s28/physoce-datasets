@@ -165,7 +165,6 @@ class EKEDownloader(_Downloader):
                 engine="netcdf4",
             )
         logger.info(f"Download complete! Dataset saved to {self.save_file_path}")
-        self.downloaded = True
 
     @staticmethod
     def update_metadata(ds: xr.Dataset) -> xr.Dataset:

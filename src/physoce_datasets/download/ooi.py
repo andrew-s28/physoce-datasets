@@ -172,7 +172,7 @@ class EAProfilerDownloader(_OOIBase):
         """Initialize the EAProfilerDownloader with parameters for downloading.
 
         Args:
-            location (str): Location for the dataset in the form of a site identifier (e.g., "CE01ISSM"). Must be one of the following: "CE01ISSM", "CE02SHSM", "CE04OSSM", "CE06ISSM", "CE07SHSM", "CE09OSSM". Required.
+            location (str): Location for the dataset in the form of a site identifier (e.g., "CE01ISSM"). Must be one of the following: "CE01ISSM", "CE02SHSM", "CE04OSSM", "CE06ISSM", "CE07SHSM", "CE09OSSM", "RS01SBPS". Required.
             start_date (str | None): The start date for the dataset in "YYYY-MM-DD" format. If None, defaults to "2000-01-01".
             end_date (str | None): The end date for the dataset in "YYYY-MM-DD" format. If None, defaults to the current date.
             save_dir (str | None): The directory to save the downloaded dataset. If None, defaults to a "data" directory in the current working directory.
