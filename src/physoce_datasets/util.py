@@ -103,6 +103,14 @@ OOI_PROFILERS_INFO: dict[str, OOISiteInfo] = {
         "lat": 44.3683,
         "lon": -124.953,
     },
+    "rs01sbps": {
+        "refdes": "RS01SBPS-SF01A-2A-CTDPFA102",
+        "method": "streamed",
+        "instrument": "ctdpf_sbe43_sample",
+        "short_name": "CTD",
+        "lat": 44.529,
+        "lon": -125.3893,
+    },
     "ce06issp": {
         "refdes": "CE06ISSP-SP001-09-CTDPFJ000",
         "method": "recovered_cspp",
@@ -322,7 +330,7 @@ class OOIProfiler:
         """Validate that the site identifier is valid and that the latitude and longitude values are within acceptable bounds.
 
         Raises:
-            ValueError: If the site identifier is not one of the following: "CE01ISSP", "CE02SHSP", "CE04OSPS", "CE04OSPD", "CE06ISSP", "CE07SHSP", "CE09OSSP".
+            ValueError: If the site identifier is not one of the following: "CE01ISSP", "CE02SHSP", "CE04OSPS", "CE04OSPD", "CE06ISSP", "CE07SHSP", "CE09OSSP", "RS01SBPS".
 
         """
         if self.site not in OOI_PROFILERS_INFO:

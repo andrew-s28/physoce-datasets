@@ -242,6 +242,7 @@ def _ooi_ea_mooring(
     \t- 'CE06ISSP' (Washington Inshore)\n
     \t- 'CE07SHSP' (Washington Shelf)\n
     \t- 'CE09OSPM' (Washington Offshore)\n
+    \t- 'RS01SBPS' (Oregon Slope Base Shallow)\n
 
     Please see the OOI Endurance Array documentation for more information on these sites: https://oceanobservatories.org/array/coastal-endurance/.
     """,
