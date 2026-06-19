@@ -4,7 +4,7 @@ import io
 import re
 import warnings
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 import gsw
 import numpy as np
@@ -246,6 +246,14 @@ class EAProfilerDownloader(_OOIBase):
                 "units": "kg/m^3",
             }
         )
+        ds["mixed_layer_depth"].attrs.update(
+            {
+                "long_name": "Mixed Layer Depth",
+                "standard_name": "sea_water_mixed_layer_depth",
+                "units": "m",
+                "notes": "Calculated using a threshold method based on the depth that is 0.03 kg/m^3 denser than the surface value, where the surface value is defined by the mean of the upper 5 meters.",
+            }
+        )
         existing_history = ds.attrs.pop("history", "")
         ds.attrs.update(
             {
@@ -288,7 +296,7 @@ class EAProfilerDownloader(_OOIBase):
             ds["sea_water_practical_salinity"], ds["sea_water_pressure"], self.location.lon, self.location.lat
         )
         ds["sea_water_conservative_temperature"] = gsw.CT_from_t(
-            ds["sea_water_temperature"], ds["sea_water_pressure"], ds["sea_water_absolute_salinity"]
+            ds["sea_water_absolute_salinity"], ds["sea_water_temperature"], ds["sea_water_pressure"]
         )
         ds["sea_water_density"] = gsw.rho(
             ds["sea_water_absolute_salinity"], ds["sea_water_conservative_temperature"], ds["sea_water_pressure"]
@@ -406,6 +414,57 @@ class EAProfilerDownloader(_OOIBase):
         ds_binned = xr.concat(binned_profiles, dim="time", join="outer")
         return ds_binned
 
+    @staticmethod
+    def threshold_mld(
+        variable: xr.DataArray, threshold_type: Literal["temperature", "density"], threshold: float
+    ) -> xr.DataArray:
+        """Interpolate depth to a threshold value of the variable using linear interpolation between the two bounding depth levels.
+
+        Args:
+            variable (xr.DataArray): 2D array of variable values with dimensions (time, depth)
+            threshold_type (str): "temperature" or "density", determines whether to look for first value less than or greater than threshold
+            threshold (float): difference from surface value to define threshold for MLD calculation, always positive
+
+        Returns:
+            xr.DataArray: 1D array of interpolated depth values at the threshold for each time step
+
+        """
+        # need to treat temp and density differently since temp decreases with depth and density increases with depth
+        # ensure threshold is positive and flip sign for density since it increases with depth
+        threshold = abs(threshold)
+        threshold = threshold if threshold_type == "density" else -threshold
+        # find threshold value using the top 5 meters of the profile as the surface value
+        threshold_target = variable.isel(depth=slice(0, 5)).mean(dim="depth") + threshold
+
+        # find indices of bounding depth levels for interpolation
+        if threshold_type == "temperature":
+            # index of first greater than target, since argmax finds first True
+            hi = np.argmax(variable.values <= threshold_target.values[:, None], axis=1)
+        elif threshold_type == "density":
+            # index of first less than target, since argmax finds first True
+            hi = np.argmax(variable.values >= threshold_target.values[:, None], axis=1)
+
+        hi = np.clip(hi, 1, variable["depth"].size - 1)  # ensure hi is at least 1 and at most the last index
+        # hi is high in the index sense, not the real depth space sense, so low index is hi - 1
+        lo = hi - 1
+
+        # Get values at bounding indices
+        d0 = variable["depth"].values[lo]
+        d1 = variable["depth"].values[hi]
+        v0 = variable.values[np.arange(variable.values.shape[0]), lo]
+        v1 = variable.values[np.arange(variable.values.shape[0]), hi]
+
+        # Slope is rise over run
+        slope = (d1 - d0) / (v1 - v0)
+        out = d0 + slope * (threshold_target.values - v0)
+
+        out = xr.DataArray(out, coords={"time": variable.coords["time"]}, dims=["time"])
+
+        # mask out profiles that have all nans in the upper 5 meters since we can't calculate a threshold for those
+        all_surface_nans = variable.isel(depth=slice(0, 5)).isnull().all(dim="depth")
+
+        return out[~all_surface_nans]
+
     def download(self) -> None:
         """Download the netCDF data files from the THREDDS catalog and save them to a local directory."""
         logger.info(f"Getting list of data files for {self.location}...")
@@ -437,6 +496,10 @@ class EAProfilerDownloader(_OOIBase):
         # interpolate up to 1 day
         ds_binned = ds_binned.interpolate_na(
             dim="time", method="linear", use_coordinate=True, max_gap=np.timedelta64(1, "D")
+        )
+        # calculate mixed layer depth using a density threshold of 0.03 kg/m^3
+        ds_binned["mixed_layer_depth"] = self.threshold_mld(
+            ds_binned["sea_water_density"], threshold_type="density", threshold=0.03
         )
         # now take daily mean
         ds_binned = ds_binned.resample(time="1D").mean()
