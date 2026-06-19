@@ -246,12 +246,20 @@ class EAProfilerDownloader(_OOIBase):
                 "units": "kg/m^3",
             }
         )
-        ds["mixed_layer_depth"].attrs.update(
+        ds["mixed_layer_depth_from_density"].attrs.update(
             {
-                "long_name": "Mixed Layer Depth",
-                "standard_name": "sea_water_mixed_layer_depth",
+                "long_name": "Mixed Layer Depth From Density",
+                "standard_name": "sea_water_mixed_layer_depth_from_density",
                 "units": "m",
                 "notes": "Calculated using a threshold method based on the depth that is 0.03 kg/m^3 denser than the surface value, where the surface value is defined by the mean of the upper 5 meters.",
+            }
+        )
+        ds["mixed_layer_depth_from_temperature"].attrs.update(
+            {
+                "long_name": "Mixed Layer Depth From Temperature",
+                "standard_name": "sea_water_mixed_layer_depth_from_temperature",
+                "units": "m",
+                "notes": "Calculated using a threshold method based on the depth that is 0.2 degree C colder than the surface value, where the surface value is defined by the mean of the upper 5 meters.",
             }
         )
         ds["n_squared"].attrs.update(
@@ -522,8 +530,12 @@ class EAProfilerDownloader(_OOIBase):
             dim="time", method="linear", use_coordinate=True, max_gap=np.timedelta64(1, "D")
         )
         # calculate mixed layer depth using a density threshold of 0.03 kg/m^3
-        ds_binned["mixed_layer_depth"] = self.threshold_mld(
+        ds_binned["mixed_layer_depth_from_density"] = self.threshold_mld(
             ds_binned["sea_water_density"], threshold_type="density", threshold=0.03
+        )
+        # calculate mixed layer depth using a temperature threshold of 0.2 degree C
+        ds_binned["mixed_layer_depth_from_temperature"] = self.threshold_mld(
+            ds_binned["sea_water_temperature"], threshold_type="temperature", threshold=0.2
         )
         # calculate stratification
         ds_binned["n_squared"] = self._calculate_stratification(ds_binned)
