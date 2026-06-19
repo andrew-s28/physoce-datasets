@@ -47,7 +47,6 @@ class _Downloader(ABC):
             save_file = f"{save_file_prefix}_{self.start_date}_{self.end_date}_{self.location.file_name}.nc"
         self.save_file = save_file
         self.save_file_path = self._create_save_file(self.save_dir, self.save_file)
-        self.downloaded = False
 
     @staticmethod
     def _create_data_dir(save_dir: str | None) -> Path:
@@ -114,8 +113,8 @@ class _Downloader(ABC):
                 "Please consider opening an issue on GitHub to report this at https://github.com/andrew-s28/physoce-datasets/issues"
             )
             raise ValueError(msg)
-        if not self.downloaded:
-            msg = f"Dataset not downloaded. Please call the `{self.__class__.__name__}.download()` method first. If you've already called `download()`, there may have been an issue during the download process. "
+        if not self.save_file_path.exists():
+            msg = f"Dataset does not exist at {self.save_file_path}. Check that the file exists and is readable. If not, call the `{self.__class__.__name__}.download()` method first. If you've already called `download()`, there may have been an issue during the download process. "
             raise ValueError(msg)
         save_file_path = self._create_save_file(self.save_dir, self.save_file)
         return xr.open_dataset(save_file_path, **kwargs)  # ty:ignore[invalid-argument-type]
