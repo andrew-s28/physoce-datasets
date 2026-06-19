@@ -12,7 +12,6 @@ import xarray as xr
 from harmony import Client
 
 from physoce_datasets.logging import logger
-from physoce_datasets.util import get_area_str, parse_area
 
 from ._base import _Downloader
 
@@ -85,8 +84,9 @@ class SSTDownloader(_Downloader):
         self.end_date = (
             end_date if end_date is not None else datetime.datetime.now(tz=datetime.UTC).strftime("%Y-%m-%d")
         )
-        self.area = parse_area(area)
-        area_str = get_area_str(self.area)  # for file name
+        # area needs to be converted to location once other issues are fixed
+        self.area = {"lon_min": -180, "lon_max": 180, "lat_min": -90, "lat_max": 90}
+        area_str = area  # for file name
         self.save_dir = self._create_data_dir(save_dir)
         self.save_file = (
             save_file if save_file is not None else f"nasa_mur_sst_{self.start_date}_{self.end_date}_{area_str}.nc"

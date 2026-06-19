@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import warnings
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import click
 import copernicusmarine
@@ -17,6 +17,8 @@ from ._base import _Downloader
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from physoce_datasets.util import LonLat
 
 # supress info logging from copernicusmarine, will handle that ourselves
 logging.getLogger("copernicusmarine").setLevel(logging.ERROR)
@@ -69,12 +71,14 @@ class EKEDownloader(_Downloader):
         """
         super().__init__(
             location=location,
+            location_type="lonlat",
             save_file_prefix="aviso_eke",
             save_dir=save_dir,
             save_file=save_file,
             start_date=start_date,
             end_date=end_date,
         )
+        self.location = cast("LonLat", self.location)
 
         login_to_copernicus_marine()
 

@@ -5,7 +5,7 @@ from pathlib import Path
 
 import xarray as xr
 
-from physoce_datasets.util import parse_location
+from physoce_datasets.util import parse_location_or_site
 
 
 class _Downloader(ABC):
@@ -14,6 +14,7 @@ class _Downloader(ABC):
     def __init__(
         self,
         location: str,
+        location_type: str,
         save_file_prefix: str,
         save_dir: str | None = None,
         save_file: str | None = None,
@@ -24,6 +25,7 @@ class _Downloader(ABC):
 
         Args:
             location (str): Location for the dataset in the format 'lon,lat' (e.g., '132.0,36.55'). Required.
+            location_type (str): The type of the location, either 'lonlat' or 'site'. Used to determine how to parse the location string.
             save_file_prefix (str): A prefix to add to the saved file name.
             save_dir (str | None): The directory to save the downloaded dataset. If None, defaults to a "data" directory in the current working directory.
             save_file (str | None): The file name to save the downloaded dataset. If None, defaults to a name based on the dataset and date range.
@@ -39,7 +41,7 @@ class _Downloader(ABC):
 
         self.start_date = start_date
         self.end_date = end_date
-        self.location = parse_location(location)
+        self.location = parse_location_or_site(location, location_type)
         self.save_dir = self._create_data_dir(save_dir)
         if save_file is None:
             save_file = f"{save_file_prefix}_{self.start_date}_{self.end_date}_{self.location.file_name}.nc"

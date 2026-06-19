@@ -5,7 +5,8 @@ appropriate metadata.
 """
 
 from .eke import EKEDownloader
+from .ooi import EAMooringDownloader, EAProfilerDownloader
 from .sst import SSTDownloader
 from .wind_stress import WindStressDownloader
 
-__all__ = ["EKEDownloader", "SSTDownloader", "WindStressDownloader"]
+__all__ = ["EAMooringDownloader", "EAProfilerDownloader", "EKEDownloader", "SSTDownloader", "WindStressDownloader"]
