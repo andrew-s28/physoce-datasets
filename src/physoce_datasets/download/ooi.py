@@ -254,6 +254,14 @@ class EAProfilerDownloader(_OOIBase):
                 "notes": "Calculated using a threshold method based on the depth that is 0.03 kg/m^3 denser than the surface value, where the surface value is defined by the mean of the upper 5 meters.",
             }
         )
+        ds["n_squared"].attrs.update(
+            {
+                "long_name": "N Squared",
+                "standard_name": "square_of_brunt_vaisala_frequency_in_sea_water",
+                "units": "1/s^2",
+                "description": "A measure of the stratification of the water column, calculated from the vertical gradient of density.",
+            }
+        )
         existing_history = ds.attrs.pop("history", "")
         ds.attrs.update(
             {
@@ -465,6 +473,22 @@ class EAProfilerDownloader(_OOIBase):
 
         return out[~all_surface_nans]
 
+    def _calculate_stratification(self, ds: xr.Dataset) -> xr.Dataset:
+        """Calculate the Brunt-Vaisala frequency (n_squared) from density profiles in the dataset.
+
+        Args:
+            ds (xr.Dataset): The xarray Dataset containing the profiler data with a "sea_water_density" and "sea_water_pressure" variable.
+
+        Returns:
+            xr.DataArray: The xarray DataArray containing stratification data.
+
+        """
+        n_squared = np.sqrt(
+            (gsw.grav(self.location.lat, ds["sea_water_pressure"]) / ds["sea_water_density"])
+            * ds["sea_water_density"].differentiate("depth", edge_order=2)
+        )
+        return n_squared
+
     def download(self) -> None:
         """Download the netCDF data files from the THREDDS catalog and save them to a local directory."""
         logger.info(f"Getting list of data files for {self.location}...")
@@ -501,6 +525,8 @@ class EAProfilerDownloader(_OOIBase):
         ds_binned["mixed_layer_depth"] = self.threshold_mld(
             ds_binned["sea_water_density"], threshold_type="density", threshold=0.03
         )
+        # calculate stratification
+        ds_binned["n_squared"] = self._calculate_stratification(ds_binned)
         # now take daily mean
         ds_binned = ds_binned.resample(time="1D").mean()
 
