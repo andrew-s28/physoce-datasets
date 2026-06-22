@@ -515,7 +515,7 @@ class EAProfilerDownloader(_OOIBase):
                 ds[i].load()
 
         ds = [self._calculate_density(di) for di in ds]
-        ds_merged = xr.merge(ds, compat="no_conflicts", join="outer")
+        ds_merged = xr.concat(ds, dim="time")
         ds_merged = ds_merged.sortby("time")  # ensure data is sorted by time after merging
         ds_merged = ds_merged.sel(
             time=slice(self.start_date, self.end_date)

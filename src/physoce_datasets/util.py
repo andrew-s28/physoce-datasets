@@ -88,7 +88,7 @@ OOI_PROFILERS_INFO: dict[str, OOISiteInfo] = {
         "lon": -124.299,
     },
     "ce04osps": {
-        "refdes": " CE04OSPS-SF01B-2A-CTDPFA107",
+        "refdes": "CE04OSPS-SF01B-2A-CTDPFA107",
         "method": "streamed",
         "instrument": "ctdpf_sbe43_sample",
         "short_name": "CTD",
