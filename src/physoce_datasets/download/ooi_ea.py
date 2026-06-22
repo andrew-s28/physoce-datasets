@@ -1,0 +1,1287 @@
+"""Module for downloading datasets from the OOI Endurance Array Mooring."""
+
+import io
+import re
+import warnings
+from datetime import UTC, datetime
+from typing import Literal, TypedDict
+
+import gsw
+import numpy as np
+import requests
+import xarray as xr
+from bs4 import BeautifulSoup
+from flox.xarray import xarray_reduce
+from tqdm import tqdm
+
+from physoce_datasets.logging import logger
+
+from ._base import _Downloader
+
+__all__ = ["MooringCTD", "ProfilerCTD", "ProfilerChlorophyll"]
+
+# only drop fully failing flags as suspect flag 3 can be valid data
+QARTOD_DROP_FLAG = 4
+
+# variables to drop from OOI EA CTD datasets, used in processing after download
+VARIABLES_TO_DROP = [
+    "obs",
+    # will manually add back latitude and longitude
+    "lat",
+    "lon",
+    # these times should all be the same as the time dimension
+    "driver_timestamp",
+    "ctd_time",
+    "internal_timestamp",
+    "ingestion_timestamp",
+    "port_timestamp",
+    "preferred_timestamp",
+    "suspect_timestamp",
+    "id",
+    # don't need conductivity
+    "conductivity",
+    "sea_water_electrical_conductivity",
+    # will calculate density ourselves
+    "density",
+    # qc executed
+    "pressure_qc_executed",
+    "conductivity_qc_executed",
+    "sea_water_pressure_qc_executed",
+    "sea_water_electrical_conductivity_qc_executed",
+    "sea_water_practical_salinity_qc_executed",
+    "sea_water_temperature_qc_executed",
+    "sea_water_density_qc_executed",
+    "fluorometric_chlorophyll_a_qc_executed",
+    "fluorometric_cdom_qc_executed",
+    "optical_backscatter_qc_executed",
+    "total_volume_scattering_coefficient_qc_executed",
+    # qc results
+    "pressure_qc_results",
+    "sea_water_pressure_qc_results",
+    "sea_water_electrical_conductivity_qc_results",
+    "sea_water_practical_salinity_qc_results",
+    "sea_water_temperature_qc_results",
+    "sea_water_density_qc_results",
+    "fluorometric_chlorophyll_a_qc_results",
+    "fluorometric_cdom_qc_results",
+    "optical_backscatter_qc_results",
+    "total_volume_scattering_coefficient_qc_results",
+    # qartod results
+    "sea_water_pressure_qartod_results",
+    "sea_water_electrical_conductivity_qartod_results",
+    "sea_water_practical_salinity_qartod_results",
+    "sea_water_temperature_qartod_results",
+    "fluorometric_chlorophyll_a_qartod_results",
+    "fluorometric_cdom_qartod_results",
+    "optical_backscatter_qartod_results",
+    # qartod executed
+    "sea_water_pressure_qartod_executed",
+    "sea_water_electrical_conductivity_qartod_executed",
+    "sea_water_practical_salinity_qartod_executed",
+    "sea_water_temperature_qartod_executed",
+    "fluorometric_chlorophyll_a_qartod_executed",
+    "fluorometric_cdom_qartod_executed",
+    "optical_backscatter_qartod_executed",
+    # unproccessed L0 variables
+    "conductivity",
+    "temperature",
+    "provenance",
+    "pressure",
+    "raw_signal_chl",
+    "raw_signal_cdom",
+    "raw_signal_beta",
+    "raw_internal_temp",
+    # unprocessed temperature from the pressure sensor, used by OOI to calculate output params but not necessary here
+    "pressure_temp",
+]
+
+
+class OOISiteInfo(TypedDict):
+    """A dictionary representing the information for an OOI site, including its reference designator, method, instrument, and geographic coordinates."""
+
+    refdes: str
+    method: str
+    instrument: str
+    short_name: str
+    lat: float
+    lon: float
+    depth: float
+
+
+OOI_MOORINGS_CTD: dict[str, OOISiteInfo] = {
+    "ce01issm": {
+        "refdes": "CE01ISSM-RID16-03-CTDBPC000",
+        "method": "recovered_inst",
+        "instrument": "ctdbp_cdef_instrument_recovered",
+        "short_name": "CTD",
+        "lat": 44.6598,
+        "lon": -124.095,
+        "depth": 25,
+    },
+    "ce02shsm": {
+        "refdes": "CE02SHSM-RID27-03-CTDBPC000",
+        "method": "recovered_inst",
+        "instrument": "ctdbp_cdef_instrument_recovered",
+        "short_name": "CTD",
+        "lat": 44.6393,
+        "lon": -124.304,
+        "depth": 80,
+    },
+    "ce04ossm": {
+        "refdes": "CE04OSSM-RID27-03-CTDBPC000",
+        "method": "recovered_inst",
+        "instrument": "ctdbp_cdef_instrument_recovered",
+        "short_name": "CTD",
+        "lat": 44.3811,
+        "lon": -124.956,
+        "depth": 588,
+    },
+    "ce06issm": {
+        "refdes": "CE06ISSM-RID16-03-CTDBPC000",
+        "method": "recovered_inst",
+        "instrument": "ctdbp_cdef_instrument_recovered",
+        "short_name": "CTD",
+        "lat": 47.1336,
+        "lon": 124.272,
+        "depth": 29,
+    },
+    "ce07shsm": {
+        "refdes": "CE07SHSM-RID27-03-CTDBPC000",
+        "method": "recovered_inst",
+        "instrument": "ctdbp_cdef_instrument_recovered",
+        "short_name": "CTD",
+        "lat": 46.9859,
+        "lon": 124.566,
+        "depth": 87,
+    },
+    "ce09ossm": {
+        "refdes": "CE09OSSM-RID27-03-CTDBPC000",
+        "method": "recovered_inst",
+        "instrument": "ctdbp_cdef_instrument_recovered",
+        "short_name": "CTD",
+        "lat": 46.8517,
+        "lon": 124.982,
+        "depth": 544,
+    },
+}
+
+OOI_PROFILERS_CTD: dict[str, OOISiteInfo] = {
+    "ce01issp": {
+        "refdes": "CE01ISSP-SP001-09-CTDPFJ000",
+        "method": "recovered_cspp",
+        "instrument": "ctdpf_j_cspp_instrument_recovered",
+        "short_name": "CTD",
+        "lat": 44.662,
+        "lon": -124.096,
+        "depth": 25,
+    },
+    "ce02shsp": {
+        "refdes": "CE02SHSP-SP001-08-CTDPFJ000",
+        "method": "recovered_cspp",
+        "instrument": "ctdpf_j_cspp_instrument_recovered",
+        "short_name": "CTD",
+        "lat": 44.6372,
+        "lon": -124.299,
+        "depth": 80,
+    },
+    "ce04osps": {
+        "refdes": "CE04OSPS-SF01B-2A-CTDPFA107",
+        "method": "streamed",
+        "instrument": "ctdpf_sbe43_sample",
+        "short_name": "CTD",
+        "lat": 44.3683,
+        "lon": -124.953,
+        "depth": 588,
+    },
+    "ce04ospd": {
+        "refdes": "CE04OSPD-DP01B-01-CTDPFL105",
+        "method": "recovered_wfp",
+        "instrument": "dpc_ctd_instrument_recovered",
+        "short_name": "CTD",
+        "lat": 44.3683,
+        "lon": -124.953,
+        "depth": 588,
+    },
+    "rs01sbps": {
+        "refdes": "RS01SBPS-SF01A-2A-CTDPFA102",
+        "method": "streamed",
+        "instrument": "ctdpf_sbe43_sample",
+        "short_name": "CTD",
+        "lat": 44.529,
+        "lon": -125.3893,
+        "depth": 2906,
+    },
+    "ce06issp": {
+        "refdes": "CE06ISSP-SP001-09-CTDPFJ000",
+        "method": "recovered_cspp",
+        "instrument": "ctdpf_j_cspp_instrument_recovered",
+        "short_name": "CTD",
+        "lat": 47.136,
+        "lon": 124.269,
+        "depth": 29,
+    },
+    "ce07shsp": {
+        "refdes": "CE07SHSP-SP001-08-CTDPFJ000",
+        "method": "recovered_cspp",
+        "instrument": "ctdpf_j_cspp_instrument_recovered",
+        "short_name": "CTD",
+        "lat": 46.9843,
+        "lon": 124.565,
+        "depth": 87,
+    },
+    "ce09ospm": {
+        "refdes": "CE09OSPM-WFP01-03-CTDPFK000",
+        "method": "recovered_wfp",
+        "instrument": "wfp-ctdpf_ckl_wfp_instrument_recovered",
+        "short_name": "CTD",
+        "lat": 46.8517,
+        "lon": 124.982,
+        "depth": 544,
+    },
+}
+
+OOI_PROFILERS_CHL: dict[str, OOISiteInfo] = {
+    "ce01issp": {
+        "refdes": "CE01ISSP-SP001-08-FLORTJ000",
+        "method": "recovered_cspp",
+        "instrument": "flort_sample",
+        "short_name": "Fluorometer Chlorophyll",
+        "lat": 44.662,
+        "lon": -124.096,
+        "depth": 25,
+    },
+    "ce02shsp": {
+        "refdes": "CE02SHSP-SP001-07-FLORTJ000",
+        "method": "recovered_cspp",
+        "instrument": "flort_sample",
+        "short_name": "Fluorometer Chlorophyll",
+        "lat": 44.6372,
+        "lon": -124.299,
+        "depth": 80,
+    },
+    "ce04osps": {
+        "refdes": "CE04OSPS-SF01B-2A-FLORTD104",
+        "method": "streamed",
+        "instrument": "flort_d_data_record",
+        "short_name": "Fluorometer Chlorophyll",
+        "lat": 44.3683,
+        "lon": -124.953,
+        "depth": 588,
+    },
+    "rs01sbps": {
+        "refdes": "RS01SBPS-SF01A-3A-FLORTD101",
+        "method": "streamed",
+        "instrument": "flort_d_data_record",
+        "short_name": "Fluorometer Chlorophyll",
+        "lat": 44.529,
+        "lon": -125.3893,
+        "depth": 2906,
+    },
+    "ce06issp": {
+        "refdes": "CE06ISSP-SP001-08-FLORTJ000",
+        "method": "recovered_cspp",
+        "instrument": "flort_sample",
+        "short_name": "Fluorometer Chlorophyll",
+        "lat": 47.136,
+        "lon": 124.269,
+        "depth": 29,
+    },
+    "ce07shsp": {
+        "refdes": "CE07SHSP-SP001-08-FLORTJ000",
+        "method": "recovered_cspp",
+        "instrument": "flort_sample",
+        "short_name": "Fluorometer Chlorophyll",
+        "lat": 46.9843,
+        "lon": 124.565,
+        "depth": 87,
+    },
+    "ce09ospm": {
+        "refdes": "CE09OSPM-WFP01-03-FLORTK000",
+        "method": "recovered_wfp",
+        "instrument": "flort_sample",
+        "short_name": "Fluorometer Chlorophyll",
+        "lat": 46.8517,
+        "lon": 124.982,
+        "depth": 544,
+    },
+}
+
+
+class OOISite:
+    """A class representing an OOI site with its reference designator, method, instrument, and geographic coordinates."""
+
+    def __init__(self, site: str, instrument: str, location_type: str) -> None:
+        """Initialize an OOISite object with the given parameters.
+
+        Args:
+            site (str): The site identifier. Must be one of the following: "CE01ISSP", "CE02SHSP", "CE04OSPS", "CE04OSPD", "CE06ISSP", "CE07SHSP", "CE09OSSP", "RS01SBPS". Required.
+            instrument (str): The instrument identifier. Required.
+            location_type (str): The type of location for the site. Required.
+
+        """
+        self.site = site.lower()
+        self.instrument = instrument.lower()
+        self.location_type = location_type.lower()
+
+        if instrument == "ctd" and location_type == "profiler":
+            self.site_info = OOI_PROFILERS_CTD[self.site]
+        elif instrument == "chl" and location_type == "profiler":
+            self.site_info = OOI_PROFILERS_CHL[self.site]
+        elif instrument == "ctd" and location_type == "mooring":
+            self.site_info = OOI_MOORINGS_CTD[self.site]
+
+        self.validate()
+
+        self.refdes = self.site_info["refdes"]
+        self.method = self.site_info["method"]
+        self.instrument = self.site_info["instrument"]
+        self.lat = self.site_info["lat"]
+        self.lon = self.site_info["lon"]
+        self.depth = self.site_info["depth"]
+        self.short_name = self.site_info["short_name"]
+
+    def validate(self) -> None:
+        """Validate that the site identifier is valid and that the latitude and longitude values are within acceptable bounds.
+
+        Raises:
+            ValueError: If the site identifier is not one of the following: "CE01ISSP", "CE02SHSP", "CE04OSPS", "CE04OSPD", "CE06ISSP", "CE07SHSP", "CE09OSSP", "RS01SBPS".
+
+        """
+        if self.location_type not in {"profiler", "mooring"}:
+            msg = f"Invalid location type: '{self.location_type}'. Must be either 'profiler' or 'mooring'."
+            raise ValueError(msg)
+        if self.location_type == "mooring" and self.instrument != "ctd":
+            msg = f"Invalid instrument identifier: '{self.instrument}' for location type 'mooring'. Must be 'ctd'."
+            raise ValueError(msg)
+        if self.location_type == "profiler" and self.instrument not in {"ctd", "chl"}:
+            msg = f"Invalid instrument identifier: '{self.instrument}'. Must be either 'ctd' or 'chl'."
+            raise ValueError(msg)
+        if (
+            (self.location_type == "profiler" and self.instrument == "ctd" and self.site not in OOI_PROFILERS_CTD)
+            or (self.location_type == "profiler" and self.instrument == "chl" and self.site not in OOI_PROFILERS_CHL)
+            or (self.location_type == "mooring" and self.instrument == "ctd" and self.site not in OOI_MOORINGS_CTD)
+        ):
+            msg = f"Invalid profiler identifier: '{self.site}' for instrument '{self.instrument}'. Must be one of the following (case insensitive): {', '.join(self.site_info.keys())}."
+            raise ValueError(msg)
+
+    def __repr__(self) -> str:
+        """Represent the OOISite in code outputs (e.g., Python REPL).
+
+        Returns:
+            str: A string representation of the OOISite in the format 'OOISite(site=..., short_name=..., refdes=..., method=..., instrument=..., latitude=..., longitude=...)'.
+
+        """
+        lon_str = f"{-self.lon:.0f}W" if self.lon < 0 else f"{self.lon:.0f}E"
+        lat_str = f"{-self.lat:.0f}S" if self.lat < 0 else f"{self.lat:.0f}N"
+        return (
+            f"OOISite(site='{self.site.upper()}', short_name='{self.short_name}', refdes='{self.refdes}', method='{self.method}', "
+            f"instrument='{self.instrument}', latitude={lat_str}, longitude={lon_str})"
+        )
+
+    def __str__(self) -> str:
+        """Convert the OOISite to a formatted string. Accessed with str(ooisite).
+
+        Returns:
+            str: A string representation of the OOISite in the format 'OOI EA Site {site} {short_name}'.
+
+        """
+        return f"OOI EA Site {self.site.upper()} {self.short_name}"
+
+    @property
+    def search_url(self) -> str:
+        """Construct the search URL for the OOI site based on its reference designator, method, and instrument."""
+        search_url_base = "https://thredds.dataexplorer.oceanobservatories.org/thredds/catalog/ooigoldcopy/public/"
+        return search_url_base + f"{self.refdes}-{self.method}-{self.instrument}" + "/catalog.html"
+
+    @property
+    def file_name(self) -> str:
+        """Convert the profiler site and name to a string format suitable for filenames in the format '{site}_{short_name}'."""
+        return f"{self.site.upper()}_{self.short_name}"
+
+
+class _OOIBase(_Downloader):
+    """Base class for downloading OOI Endurance Array datasets, containing shared methods and attributes for both mooring and profiler datasets."""
+
+    def __init__(
+        self,
+        location: str,
+        location_type: str,
+        instrument: str,
+        save_dir: str | None = None,
+        save_file: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> None:
+        self.location = OOISite(site=location, instrument=instrument, location_type=location_type)
+
+        self.search_url = self.location.search_url
+        self.base_url = "https://thredds.dataexplorer.oceanobservatories.org/thredds/fileServer/"
+        self.tag = self.location.refdes + r".*.nc$"  # setup regex for files we want
+
+        super().__init__(
+            save_file_prefix=f"ooi_{location_type}_{location.lower()}_{instrument}",
+            save_dir=save_dir,
+            save_file=save_file,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+    def _filter_dates(self, nc_files: list) -> list:
+        """Filter the list of netCDF files based on the start and end dates.
+
+        Args:
+            nc_files (list): List of netCDF files to filter, with date information in the file names.
+
+        Returns:
+            list: A filtered list of netCDF files that fall within the specified date range.
+
+        """
+        date_regex = re.compile(r"(\d{8}T\d{6}(?:\.\d+)?)-(\d{8}T\d{6}(?:\.\d+)?)")
+        start_date_dt = datetime.strptime(self.start_date, "%Y-%m-%d").replace(tzinfo=UTC)
+        end_date_dt = datetime.strptime(self.end_date, "%Y-%m-%d").replace(tzinfo=UTC)
+        # get start and end dates of each deployment from the file names
+        date_search = [re.search(date_regex, f) for f in nc_files]
+        nc_files_start_dates = [
+            datetime.strptime(d.group(1).split(".")[0], "%Y%m%dT%H%M%S").replace(tzinfo=UTC)
+            for d in date_search
+            if d is not None
+        ]
+        nc_files_end_dates = [
+            datetime.strptime(d.group(2).split(".")[0], "%Y%m%dT%H%M%S").replace(tzinfo=UTC)
+            for d in date_search
+            if d is not None
+        ]
+        # filter by start date, including any data files that end after the start date
+        nc_files = [
+            f
+            for i, f in enumerate(nc_files)
+            if nc_files_end_dates[i] >= start_date_dt and nc_files_start_dates[i] <= end_date_dt
+        ]
+        return nc_files
+
+    def _list_files(self, url: str, tag: str = r".*\.nc$") -> list[str]:
+        """List the netCDF data files in a THREDDS catalog.
+
+        Args:
+            url (str): URL to a THREDDS catalog specific to a data request
+            tag (regexp, optional): Regex pattern used to distinguish files of interest. Defaults to all files ending in '.nc'.
+
+        Returns:
+            array: list of files in the catalog with the URL path set relative to the catalog
+
+        """
+        with requests.session() as s:
+            page = s.get(url).text
+
+        soup = BeautifulSoup(page, "html.parser")
+        pattern = re.compile(tag)
+        nc_files = []
+        for node in soup.find_all("a"):
+            href = node.get("href")
+            if isinstance(href, str) and pattern.search(node.get_text()):
+                nc_files.append(href)
+        nc_files = [re.sub(r"catalog.html\?dataset=", "", file) for file in nc_files]
+        nc_files = self._filter_dates(nc_files)
+        return nc_files
+
+    @staticmethod
+    def _qc_check(ds: xr.Dataset, variables: list) -> xr.Dataset:
+        """Apply QC checks to the dataset, masking out values that fail the checks.
+
+        Args:
+            ds (xr.Dataset): The xarray Dataset containing the OOI EA data.
+            variables (list): A list of variable names to apply QC checks to.
+
+        Returns:
+            xr.Dataset: The xarray Dataset with QC checks applied, where values that fail the checks are masked out.
+
+        """
+        for var in variables:
+            if var in ds:
+                ds[var] = ds[var].where(ds[f"{var}_qartod_results"] != QARTOD_DROP_FLAG)
+        return ds
+
+    @staticmethod
+    def _drop_unused_vars(ds: xr.Dataset) -> xr.Dataset:
+        """Drop variables from the dataset that are not needed for processing or analysis.
+
+        Args:
+            ds (xr.Dataset): The xarray Dataset containing the OOI EA data.
+
+        Returns:
+            xr.Dataset: The xarray Dataset with unused variables dropped.
+
+        """
+        ds = ds.drop_vars(VARIABLES_TO_DROP, errors="ignore")
+        return ds
+
+
+class _ProfilerBase(_OOIBase):
+    """Base class for downloading OOI Endurance Array Profiler datasets, containing shared methods and attributes for profiler datasets."""
+
+    def __init__(
+        self,
+        location: str,
+        instrument: str,
+        save_dir: str | None = None,
+        save_file: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> None:
+        super().__init__(
+            location=location,
+            location_type="profiler",
+            instrument=instrument,
+            save_dir=save_dir,
+            save_file=save_file,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+    @staticmethod
+    def _split_profiles(ds: xr.Dataset) -> list:
+        """Split the data set into a list of individual profiles, where each profile is a collection of data from a single deployment and profile sequence.
+
+        Args:
+            ds (xr.Dataset): The xarray Dataset containing the profiler data.
+
+        Returns:
+            list[xr.Dataset]: A list of xarray Datasets, where each Dataset corresponds to a single profile.
+
+        """
+        # split the data into profiles, assuming at least 120 seconds between profiles
+        dt = ds.where(ds["time"].diff("time") > np.timedelta64(120, "s"), drop=True).get_index("time")
+
+        # process each profile, adding the results to a list of profiles
+        profiles = []
+        jback = np.timedelta64(30, "s")  # 30 second jump back to avoid collecting data from the following profile
+        for i, d in enumerate(dt):
+            # pull out the profile
+            if i == 0:
+                profile = ds.sel(time=slice(ds["time"].values[0], d - jback))
+            else:
+                profile = ds.sel(time=slice(dt[i - 1], d - jback))
+
+            # add the profile to the list
+            profiles.append(profile)
+
+        # grab the last profile and append it to the list
+        profile = ds.sel(time=slice(d, ds["time"].values[-1]))
+        profiles.append(profile)
+        return profiles
+
+    @staticmethod
+    def _bin_profiles(ds: xr.Dataset, z_lab: str = "depth", t_lab: str = "time") -> xr.DataArray | xr.Dataset | None:
+        """Bins a profiler time series into depth bins.
+
+        Args:
+            ds (xr.dataset): OOI profiler dataset
+            z (array): edges of depth/pressure bins
+            z_lab (str, optional): name of depth/pressure in dataset. Defaults to 'depth'.
+            t_lab (str, optional): name of time in dataset. Defaults to 'time'.
+
+        Returns:
+            xr.dataset: binned dataset
+
+        """
+        # setup 1 meter depth bins
+        step = 1
+        # find minimum and maximum depth bins over all data
+        depth_min = (
+            np.floor(np.min(ds["depth"].values)) - step / 2
+        )  # want centers to be integer depths, so need to start edges at step / 2 before min depth
+        depth_max = np.ceil(np.max(ds["depth"].values)) + step / 2  # same as above
+        # depth_bins is edges of bins
+        if np.isnan(depth_min) or np.isnan(depth_max):
+            return None
+        depth_bins = np.arange(
+            depth_min, depth_max + step, step
+        )  # need to go past by step for stop due to exclusive end range
+
+        # one last catch for datetime or string types which will break the binning, though these should be removed in processing
+        types = [ds[i].dtype for i in ds]
+        var_names = list(ds.keys())
+        exclude = []
+        for i, t in enumerate(types):
+            if not (np.issubdtype(t, np.number)):
+                exclude.append(var_names[i])
+        ds = ds.drop_vars(exclude, errors="ignore")
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            # handle ctd data without offset
+            ds: xr.Dataset = xarray_reduce(
+                ds,
+                ds[t_lab],
+                ds[z_lab],
+                func="nanmean",
+                expected_groups=(None, depth_bins),
+                isbin=[False, True],
+                method="map-reduce",
+                skipna=True,
+            )
+
+        # manually re-assign coordinates to remove _bin coordinates and replace them with bin centers
+        depth = np.array([x.mid for x in ds.depth_bins.values])
+        ds[z_lab] = ([z_lab + "_bins"], depth)
+        ds = ds.swap_dims({z_lab + "_bins": z_lab})
+        ds = ds.drop_vars([z_lab + "_bins"])
+        time_mean = ds[t_lab].mean().values
+        ds = ds.mean(dim=t_lab)  # average over time dimension to get one profile per deployment
+        ds = ds.expand_dims({t_lab: [time_mean]})  # add time dimension back in with mean time for the profile
+
+        return ds
+
+    @staticmethod
+    def _bin_dataset(ds: xr.Dataset, z_lab: str = "depth", t_lab: str = "time") -> xr.Dataset:
+        """Split a dataset into profiles, bin them, and recombine.
+
+        Args:
+            ds (xr.Dataset): The xarray Dataset containing the profiler data.
+            z_lab (str, optional): The name of the depth variable in the dataset. Defaults to "depth".
+            t_lab (str, optional): The name of the time variable in the dataset. Defaults to "time".
+
+        Returns:
+            xr.Dataset: The binned xarray Dataset.
+
+        """
+        profiles = _ProfilerBase._split_profiles(ds)
+        binned_profiles = [_ProfilerBase._bin_profiles(p, z_lab=z_lab, t_lab=t_lab) for p in profiles]
+        binned_profiles = [p for p in binned_profiles if p is not None]
+        ds_binned = xr.concat(binned_profiles, dim="time", join="outer")
+        return ds_binned
+
+
+class ProfilerCTD(_ProfilerBase):
+    """A class to download OOI Endurance Array Profiler CTD datasets with calculated stratification and mixed layer depth."""
+
+    def __init__(
+        self,
+        location: str,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        save_dir: str | None = None,
+        save_file: str | None = None,
+    ) -> None:
+        """Initialize the EAProfilerDownloader with parameters for downloading.
+
+        Args:
+            location (str): Location for the dataset in the form of a site identifier (e.g., "CE01ISSP"). Must be one of the following: "CE01ISSP", "CE02SHSP", "CE04OSPS", "CE04OSPD", "CE06ISSP", "CE07SHSP", "CE09OSPM", "RS01SBPS". Required.
+            start_date (str | None): The start date for the dataset in "YYYY-MM-DD" format. If None, defaults to "2000-01-01".
+            end_date (str | None): The end date for the dataset in "YYYY-MM-DD" format. If None, defaults to the current date.
+            save_dir (str | None): The directory to save the downloaded dataset. If None, defaults to a "data" directory in the current working directory.
+            save_file (str | None): The file name to save the downloaded dataset. If None, defaults to a name based on the dataset and date range.
+
+        """
+        super().__init__(
+            location=location,
+            instrument="ctd",
+            save_dir=save_dir,
+            save_file=save_file,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+    @staticmethod
+    def _update_metadata(ds: xr.Dataset) -> xr.Dataset:
+        """Update the metadata of the OOI EA dataset to be CF-compliant and include necessary attributes.
+
+        Args:
+            ds (xr.Dataset): The xarray Dataset containing the OOI EA data.
+
+        Returns:
+            xr.Dataset: The xarray Dataset with updated metadata.
+
+        """
+        ds["sea_water_pressure"].attrs.update(
+            {
+                "long_name": "Sea Water Pressure",
+                "standard_name": "sea_water_pressure",
+                "units": "dbar",
+            }
+        )
+        ds["sea_water_temperature"].attrs.update(
+            {
+                "long_name": "Sea Water Temperature",
+                "standard_name": "sea_water_temperature",
+                "units": "degree_C",
+            }
+        )
+        ds["sea_water_practical_salinity"].attrs.update(
+            {
+                "long_name": "Sea Water Practical Salinity",
+                "standard_name": "sea_water_practical_salinity",
+                "units": "dimensionless",
+            }
+        )
+        ds["sea_water_absolute_salinity"].attrs.update(
+            {
+                "long_name": "Sea Water Absolute Salinity",
+                "standard_name": "sea_water_absolute_salinity",
+                "units": "g/kg",
+            }
+        )
+        ds["sea_water_conservative_temperature"].attrs.update(
+            {
+                "long_name": "Sea Water Conservative Temperature",
+                "standard_name": "sea_water_conservative_temperature",
+                "units": "degree_C",
+            }
+        )
+        ds["sea_water_density"].attrs.update(
+            {
+                "long_name": "Sea Water Density",
+                "standard_name": "sea_water_density",
+                "units": "kg/m^3",
+            }
+        )
+        ds["mixed_layer_depth_from_density"].attrs.update(
+            {
+                "long_name": "Mixed Layer Depth From Density",
+                "standard_name": "sea_water_mixed_layer_depth_from_density",
+                "units": "m",
+                "notes": "Calculated using a threshold method based on the depth that is 0.03 kg/m^3 denser than the surface value, where the surface value is defined by the mean of the upper 5 meters.",
+            }
+        )
+        ds["mixed_layer_depth_from_temperature"].attrs.update(
+            {
+                "long_name": "Mixed Layer Depth From Temperature",
+                "standard_name": "sea_water_mixed_layer_depth_from_temperature",
+                "units": "m",
+                "notes": "Calculated using a threshold method based on the depth that is 0.2 degree C colder than the surface value, where the surface value is defined by the mean of the upper 5 meters.",
+            }
+        )
+        ds["n_squared"].attrs.update(
+            {
+                "long_name": "N Squared",
+                "standard_name": "square_of_brunt_vaisala_frequency_in_sea_water",
+                "units": "1/s^2",
+                "description": "A measure of the stratification of the water column, calculated from the vertical gradient of density.",
+            }
+        )
+        existing_history = ds.attrs.pop("history", "")
+        ds.attrs.update(
+            {
+                "description": "CTD data from OOI Endurance Array surface moorings, obtained via the OOI THREDDS catalog. This dataset includes processed variables such as absolute salinity, conservative temperature, and density calculated from the L2 derived variables of practical salinity, temperature, and pressure provided from OOI.",
+                "last updated": datetime.now(UTC).isoformat(timespec="minutes"),
+                "history": existing_history
+                + "\n"
+                + f"{datetime.now(UTC).isoformat(timespec='minutes')} Downloaded and processed data using physoce-datasets (https://github.com/physoce/physoce-datasets)",
+                "time_coverage_start": ds["time"].min().dt.strftime("%Y-%m-%dT%H:%M:%SZ").item(),
+                "time_coverage_end": ds["time"].max().dt.strftime("%Y-%m-%dT%H:%M:%SZ").item(),
+            },
+        )
+        return ds
+
+    def _calculate_density(self, ds: xr.Dataset) -> xr.Dataset:
+        """Calculate density from salinity and temperature for an OOI EA dataset.
+
+        Args:
+            ds (xr.Dataset): The raw xarray Dataset containing the OOI EA data.
+
+        Returns:
+            xr.Dataset: The processed xarray Dataset with calculated density and added metadata.
+
+        """
+        ds["sea_water_absolute_salinity"] = gsw.SA_from_SP(
+            ds["sea_water_practical_salinity"], ds["sea_water_pressure"], self.location.lon, self.location.lat
+        )
+        ds["sea_water_conservative_temperature"] = gsw.CT_from_t(
+            ds["sea_water_absolute_salinity"], ds["sea_water_temperature"], ds["sea_water_pressure"]
+        )
+        ds["sea_water_density"] = gsw.rho(
+            ds["sea_water_absolute_salinity"], ds["sea_water_conservative_temperature"], ds["sea_water_pressure"]
+        )
+
+        return ds
+
+    @staticmethod
+    def threshold_mld(
+        variable: xr.DataArray, threshold_type: Literal["temperature", "density"], threshold: float
+    ) -> xr.DataArray:
+        """Interpolate depth to a threshold value of the variable using linear interpolation between the two bounding depth levels.
+
+        Args:
+            variable (xr.DataArray): 2D array of variable values with dimensions (time, depth)
+            threshold_type (str): "temperature" or "density", determines whether to look for first value less than or greater than threshold
+            threshold (float): difference from surface value to define threshold for MLD calculation, always positive
+
+        Returns:
+            xr.DataArray: 1D array of interpolated depth values at the threshold for each time step
+
+        """
+        # need to treat temp and density differently since temp decreases with depth and density increases with depth
+        # ensure threshold is positive and flip sign for density since it increases with depth
+        threshold = abs(threshold)
+        threshold = threshold if threshold_type == "density" else -threshold
+        # find threshold value using the top 5 meters of the profile as the surface value
+        threshold_target = variable.isel(depth=slice(0, 5)).mean(dim="depth") + threshold
+
+        # find indices of bounding depth levels for interpolation
+        if threshold_type == "temperature":
+            # index of first greater than target, since argmax finds first True
+            hi = np.argmax(variable.values[:, 5:] <= threshold_target.values[:, None], axis=1) + 5
+            all_false = ~np.any(
+                variable.values[:, 5:] >= threshold_target.values[:, None], axis=-1
+            )  # find profiles with all values less than target
+        elif threshold_type == "density":
+            # index of first less than target, since argmax finds first True
+            hi = np.argmax(variable.values[:, 5:] >= threshold_target.values[:, None], axis=1) + 5
+            all_false = ~np.any(
+                variable.values[:, 5:] >= threshold_target.values[:, None], axis=-1
+            )  # find profiles with all values less than target
+
+        hi = np.clip(hi, 1, variable["depth"].size - 1)  # ensure hi is at least 1 and at most the last index
+        # hi is high in the index sense, not the real depth space sense, so low index is hi - 1
+        lo = hi - 1
+
+        # Get values at bounding indices
+        d0 = variable["depth"].values[lo]
+        d1 = variable["depth"].values[hi]
+        v0 = variable.values[np.arange(variable.values.shape[0]), lo]
+        v1 = variable.values[np.arange(variable.values.shape[0]), hi]
+
+        # check if threshold_target_values is within the bounds of v0 and v1 for each profile
+        threshold_in_bounds = (np.min(np.stack([v0, v1], axis=0), axis=0) < threshold_target.values) & (
+            threshold_target.values < np.max(np.stack([v0, v1], axis=0), axis=0)
+        )
+
+        # Slope is rise over run
+        slope = (d1 - d0) / (v1 - v0)
+        out = d0 + slope * (threshold_target.values - v0)
+
+        out = np.where(threshold_in_bounds, out, d0)  # if threshold_target is not within bounds, set to d0 (5 m depth)
+
+        # silence RuntimeWarnings as we expect some all NaN slices when calculating MLD for profiles that don't meet the threshold condition
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            # for profiles where all values are greater than (temp) or less than (density) the threshold, set MLD to last valid depth value (deepest depth)
+            # first broadcast depth to the same shape as variable_values for easier indexing
+            depth_broadcasted = np.broadcast_to(variable["depth"].values, variable.values.shape)
+            depth_broadcasted = np.where(
+                all_false[:, None], depth_broadcasted, np.nan
+            )  # set depth to nan for profiles that don't meet the threshold condition
+            depth_broadcasted = np.where(
+                np.isnan(variable.values), np.nan, depth_broadcasted
+            )  # set depth to nan for profiles that have nan values
+            last_valid_depth = np.nanmax(depth_broadcasted, axis=-1)  # find last valid depth for each profile
+            out = np.where(all_false, last_valid_depth, out)  # set MLD
+
+        out = xr.DataArray(out, coords={"time": variable.coords["time"]}, dims=["time"])
+
+        # mask out profiles that have all nans in the upper 5 meters since we can't calculate a threshold for those
+        all_surface_nans = variable.isel(depth=slice(0, 5)).isnull().all(dim="depth")
+
+        return out[~all_surface_nans]
+
+    def _calculate_stratification(self, ds: xr.Dataset) -> xr.Dataset:
+        """Calculate the Brunt-Vaisala frequency (n_squared) from density profiles in the dataset.
+
+        Args:
+            ds (xr.Dataset): The xarray Dataset containing the profiler data with a "sea_water_density" and "sea_water_pressure" variable.
+
+        Returns:
+            xr.DataArray: The xarray DataArray containing stratification data.
+
+        """
+        n_squared = np.sqrt(
+            (gsw.grav(self.location.lat, ds["sea_water_pressure"]) / ds["sea_water_density"])
+            * ds["sea_water_density"].differentiate("depth", edge_order=2)
+        )
+        return n_squared
+
+    def download(self) -> None:
+        """Download the netCDF data files from the THREDDS catalog and save them to a local directory."""
+        logger.info(f"Getting list of data files for {self.location}...")
+        nc_files = self._list_files(self.search_url, self.tag)
+        if not nc_files:
+            logger.warning(f"No files found for {self.location} in the specified date range. Exiting download.")
+            return
+        download_urls = [self.base_url + f + "#mode=bytes" for f in nc_files]
+
+        logger.info(f"Downloading files for {self.location}...")
+        ds: list[xr.Dataset] = []
+        for f in tqdm(download_urls, desc="Downloading datasets"):
+            r = requests.get(f, timeout=(3.05, 120))
+            if r.ok:
+                ds.append(xr.open_dataset(io.BytesIO(r.content)))
+                ds[-1] = ds[-1].swap_dims({"obs": "time"}).squeeze()
+                ds[-1] = ds[-1].where(ds[-1]["depth"] <= self.location.depth, drop=True)
+
+        ds = [self._calculate_density(di) for di in ds]
+        ds_concat = xr.concat(ds, dim="time")
+        ds_concat = ds_concat.sortby("time")  # ensure data is sorted by time after merging
+        ds_concat = ds_concat.sel(
+            time=slice(self.start_date, self.end_date)
+        )  # subset to specified date range after merging
+
+        ds_concat = self._qc_check(
+            ds_concat, variables=["sea_water_pressure", "sea_water_temperature", "sea_water_practical_salinity"]
+        )
+        ds_concat = self._drop_unused_vars(ds_concat)
+
+        ds_binned = self._bin_dataset(ds_concat)
+
+        # interpolate up to 5 meters
+        ds_binned = ds_binned.interpolate_na(dim="depth", method="linear", use_coordinate=True, max_gap=5)
+        # interpolate up to 1 day
+        ds_binned = ds_binned.interpolate_na(
+            dim="time", method="linear", use_coordinate=True, max_gap=np.timedelta64(1, "D")
+        )
+        # calculate mixed layer depth using a density threshold of 0.03 kg/m^3
+        ds_binned["mixed_layer_depth_from_density"] = self.threshold_mld(
+            ds_binned["sea_water_density"], threshold_type="density", threshold=0.03
+        )
+        # calculate mixed layer depth using a temperature threshold of 0.2 degree C
+        ds_binned["mixed_layer_depth_from_temperature"] = self.threshold_mld(
+            ds_binned["sea_water_temperature"], threshold_type="temperature", threshold=0.2
+        )
+        # calculate stratification
+        ds_binned["n_squared"] = self._calculate_stratification(ds_binned)
+        # now take daily mean
+        ds_binned = ds_binned.resample(time="1D").mean()
+
+        ds_binned = ds_binned.assign_coords(
+            {
+                "latitude": self.location.lat,
+                "longitude": self.location.lon,
+                "site": self.location.site,
+            }
+        )
+        ds_binned = self._update_metadata(ds_binned)
+
+        ds_binned.to_netcdf(self.save_file_path)
+        logger.info(f"Download complete! Dataset saved to {self.save_file_path}")
+
+
+class ProfilerChlorophyll(_ProfilerBase):
+    """A class to download OOI Endurance Array Profiler Chlorophyll datasets."""
+
+    def __init__(
+        self,
+        location: str,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        save_dir: str | None = None,
+        save_file: str | None = None,
+    ) -> None:
+        """Initialize the EAProfilerDownloader with parameters for downloading.
+
+        Args:
+            location (str): Location for the dataset in the form of a site identifier (e.g., "CE01ISSP"). Must be one of the following: "CE01ISSP", "CE02SHSP", "CE04OSPS", "CE06ISSP", "CE07SHSP", "CE09OSPM", "RS01SBPS". Required.
+            start_date (str | None): The start date for the dataset in "YYYY-MM-DD" format. If None, defaults to "2000-01-01".
+            end_date (str | None): The end date for the dataset in "YYYY-MM-DD" format. If None, defaults to the current date.
+            save_dir (str | None): The directory to save the downloaded dataset. If None, defaults to a "data" directory in the current working directory.
+            save_file (str | None): The file name to save the downloaded dataset. If None, defaults to a name based on the dataset and date range.
+
+        """
+        super().__init__(
+            location=location,
+            instrument="chl",
+            save_dir=save_dir,
+            save_file=save_file,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+    @staticmethod
+    def _update_metadata(ds: xr.Dataset) -> xr.Dataset:
+        """Update the metadata of the OOI EA dataset to be CF-compliant and include necessary attributes.
+
+        Args:
+            ds (xr.Dataset): The xarray Dataset containing the OOI EA data.
+
+        Returns:
+            xr.Dataset: The xarray Dataset with updated metadata.
+
+        """
+        ds["sea_water_temperature"].attrs.update(
+            {
+                "long_name": "Sea Water Temperature",
+                "standard_name": "sea_water_temperature",
+                "units": "degree_C",
+            }
+        )
+        ds["sea_water_practical_salinity"].attrs.update(
+            {
+                "long_name": "Sea Water Practical Salinity",
+                "standard_name": "sea_water_practical_salinity",
+                "units": "dimensionless",
+            }
+        )
+        existing_history = ds.attrs.pop("history", "")
+        ds.attrs.update(
+            {
+                "description": "CTD data from OOI Endurance Array surface moorings, obtained via the OOI THREDDS catalog. This dataset includes processed variables such as absolute salinity, conservative temperature, and density calculated from the L2 derived variables of practical salinity, temperature, and pressure provided from OOI.",
+                "last updated": datetime.now(UTC).isoformat(timespec="minutes"),
+                "history": existing_history
+                + "\n"
+                + f"{datetime.now(UTC).isoformat(timespec='minutes')} Downloaded and processed data using physoce-datasets (https://github.com/physoce/physoce-datasets)",
+                "time_coverage_start": ds["time"].min().dt.strftime("%Y-%m-%dT%H:%M:%SZ").item(),
+                "time_coverage_end": ds["time"].max().dt.strftime("%Y-%m-%dT%H:%M:%SZ").item(),
+            },
+        )
+        return ds
+
+    def _calculate_density(self, ds: xr.Dataset) -> xr.Dataset:
+        """Calculate density from salinity and temperature for an OOI EA dataset.
+
+        Args:
+            ds (xr.Dataset): The raw xarray Dataset containing the OOI EA data.
+
+        Returns:
+            xr.Dataset: The processed xarray Dataset with calculated density and added metadata.
+
+        """
+        ds["sea_water_absolute_salinity"] = gsw.SA_from_SP(
+            ds["sea_water_practical_salinity"], ds["sea_water_pressure"], self.location.lon, self.location.lat
+        )
+        ds["sea_water_conservative_temperature"] = gsw.CT_from_t(
+            ds["sea_water_absolute_salinity"], ds["sea_water_temperature"], ds["sea_water_pressure"]
+        )
+        ds["sea_water_density"] = gsw.rho(
+            ds["sea_water_absolute_salinity"], ds["sea_water_conservative_temperature"], ds["sea_water_pressure"]
+        )
+
+        return ds
+
+    def download(self) -> None:
+        """Download the netCDF data files from the THREDDS catalog and save them to a local directory."""
+        logger.info(f"Getting list of data files for {self.location}...")
+        nc_files = self._list_files(self.search_url, self.tag)
+        if not nc_files:
+            logger.warning(f"No files found for {self.location} in the specified date range. Exiting download.")
+            return
+        download_urls = [self.base_url + f + "#mode=bytes" for f in nc_files]
+
+        logger.info(f"Downloading files for {self.location}...")
+        ds: list[xr.Dataset] = []
+        for f in tqdm(download_urls, desc="Downloading datasets"):
+            r = requests.get(f, timeout=(3.05, 120))
+            if r.ok:
+                ds.append(xr.open_dataset(io.BytesIO(r.content)))
+                ds[-1] = ds[-1].swap_dims({"obs": "time"}).squeeze()
+                ds[-1] = ds[-1].reset_coords(["lat", "lon", "depth"])
+                ds[-1] = ds[-1].where(ds[-1]["depth"] < self.location.depth, drop=True)
+
+        ds_concat = xr.concat(ds, dim="time")
+        ds_concat = ds_concat.sortby("time")  # ensure data is sorted by time after merging
+        ds_concat = ds_concat.sel(
+            time=slice(self.start_date, self.end_date)
+        )  # subset to specified date range after merging
+
+        ds_concat = self._qc_check(
+            ds_concat,
+            ["fluorometric_cdom", "fluorometric_chlorophyll", "optical_backscatter"],
+        )
+        ds_concat = self._drop_unused_vars(ds_concat)
+
+        ds_binned = self._bin_dataset(ds_concat)
+
+        # interpolate up to 5 meters
+        ds_binned = ds_binned.interpolate_na(dim="depth", method="linear", use_coordinate=True, max_gap=5)
+        # interpolate up to 1 day
+        ds_binned = ds_binned.interpolate_na(
+            dim="time", method="linear", use_coordinate=True, max_gap=np.timedelta64(1, "D")
+        )
+
+        ds_binned = ds_binned.resample(time="1D").mean()
+
+        ds_binned = ds_binned.assign_coords(
+            {
+                "latitude": self.location.lat,
+                "longitude": self.location.lon,
+                "site": self.location.site,
+            }
+        )
+        ds_binned = self._update_metadata(ds_binned)
+
+        ds_binned.to_netcdf(self.save_file_path)
+        logger.info(f"Download complete! Dataset saved to {self.save_file_path}")
+
+
+class _MooringBase(_OOIBase):
+    """Base class for downloading OOI Endurance Array Mooring datasets, containing shared methods and attributes for mooring datasets."""
+
+    def __init__(
+        self,
+        location: str,
+        save_dir: str | None = None,
+        save_file: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> None:
+        super().__init__(
+            location=location,
+            location_type="mooring",
+            instrument="ctd",
+            save_dir=save_dir,
+            save_file=save_file,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+
+class MooringCTD(_MooringBase):
+    """A class to download OOI Endurance Array Mooring CTD datasets."""
+
+    def __init__(
+        self,
+        location: str,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        save_dir: str | None = None,
+        save_file: str | None = None,
+    ) -> None:
+        """Initialize the EAMooringDownloader with parameters for downloading.
+
+        Args:
+            location (str): Location for the dataset in the form of a site identifier (e.g., "CE01ISSM"). Must be one of the following: "CE01ISSM", "CE02SHSM", "CE04OSSM", "CE06ISSM", "CE07SHSM", "CE09OSSM". Required.
+            start_date (str | None): The start date for the dataset in "YYYY-MM-DD" format. If None, defaults to "2000-01-01".
+            end_date (str | None): The end date for the dataset in "YYYY-MM-DD" format. If None, defaults to the current date.
+            save_dir (str | None): The directory to save the downloaded dataset. If None, defaults to a "data" directory in the current working directory.
+            save_file (str | None): The file name to save the downloaded dataset. If None, defaults to a name based on the dataset and date range.
+
+        """
+        super().__init__(
+            location=location,
+            save_dir=save_dir,
+            save_file=save_file,
+            start_date=start_date,
+            end_date=end_date,
+        )
+
+    @staticmethod
+    def _update_metadata(ds: xr.Dataset) -> xr.Dataset:
+        """Update the metadata of the OOI EA dataset to be CF-compliant and include necessary attributes.
+
+        Args:
+            ds (xr.Dataset): The xarray Dataset containing the OOI EA data.
+
+        Returns:
+            xr.Dataset: The xarray Dataset with updated metadata.
+
+        """
+        ds["sea_water_pressure"].attrs.update(
+            {
+                "long_name": "Sea Water Pressure",
+                "standard_name": "sea_water_pressure",
+                "units": "dbar",
+            }
+        )
+        ds["sea_water_temperature"].attrs.update(
+            {
+                "long_name": "Sea Water Temperature",
+                "standard_name": "sea_water_temperature",
+                "units": "degree_C",
+            }
+        )
+        ds["sea_water_practical_salinity"].attrs.update(
+            {
+                "long_name": "Sea Water Practical Salinity",
+                "standard_name": "sea_water_practical_salinity",
+                "units": "dimensionless",
+            }
+        )
+        ds["sea_water_absolute_salinity"].attrs.update(
+            {
+                "long_name": "Sea Water Absolute Salinity",
+                "standard_name": "sea_water_absolute_salinity",
+                "units": "g/kg",
+            }
+        )
+        ds["sea_water_conservative_temperature"].attrs.update(
+            {
+                "long_name": "Sea Water Conservative Temperature",
+                "standard_name": "sea_water_conservative_temperature",
+                "units": "degree_C",
+            }
+        )
+        ds["sea_water_density"].attrs.update(
+            {
+                "long_name": "Sea Water Density",
+                "standard_name": "sea_water_density",
+                "units": "kg/m^3",
+            }
+        )
+        existing_history = ds.attrs.pop("history", "")
+        ds.attrs.update(
+            {
+                "description": "CTD data from OOI Endurance Array surface moorings, obtained via the OOI THREDDS catalog. This dataset includes processed variables such as absolute salinity, conservative temperature, and density calculated from the L2 derived variables of practical salinity, temperature, and pressure provided from OOI.",
+                "last updated": datetime.now(UTC).isoformat(timespec="minutes"),
+                "history": existing_history
+                + "\n"
+                + f"{datetime.now(UTC).isoformat(timespec='minutes')} Downloaded and processed data using physoce-datasets (https://github.com/physoce/physoce-datasets)",
+                "time_coverage_start": ds["time"].min().dt.strftime("%Y-%m-%dT%H:%M:%SZ").item(),
+                "time_coverage_end": ds["time"].max().dt.strftime("%Y-%m-%dT%H:%M:%SZ").item(),
+            },
+        )
+        return ds
+
+    def _process(self, ds: xr.Dataset) -> xr.Dataset:
+        """Process the raw OOI EA dataset by calculating density and adding metadata.
+
+        Args:
+            ds (xr.Dataset): The raw xarray Dataset containing the OOI EA data.
+
+        Returns:
+            xr.Dataset: The processed xarray Dataset with calculated density and added metadata.
+
+        """
+        ds = self._qc_check(
+            ds, variables=["sea_water_pressure", "sea_water_temperature", "sea_water_practical_salinity"]
+        )
+        ds = self._drop_unused_vars(ds)
+
+        # interpolate over gaps of up to one day
+        ds = ds.interpolate_na("time", method="linear", use_coordinate=True, max_gap=np.timedelta64(1, "D"))
+
+        ds["sea_water_absolute_salinity"] = gsw.SA_from_SP(
+            ds["sea_water_practical_salinity"], ds["sea_water_pressure"], self.location.lon, self.location.lat
+        )
+        ds["sea_water_conservative_temperature"] = gsw.CT_from_t(
+            ds["sea_water_temperature"], ds["sea_water_pressure"], ds["sea_water_absolute_salinity"]
+        )
+        ds["sea_water_density"] = gsw.rho(
+            ds["sea_water_absolute_salinity"], ds["sea_water_conservative_temperature"], ds["sea_water_pressure"]
+        )
+
+        # take daily mean
+        ds = ds.resample(time="1D").mean()
+
+        return ds
+
+    def download(self) -> None:
+        """Download the netCDF data files from the THREDDS catalog and save them to a local directory."""
+        logger.info(f"Getting list of data files for {self.location}...")
+        nc_files = self._list_files(self.search_url, self.tag)
+        if not nc_files:
+            logger.warning(f"No files found for {self.location} in the specified date range. Exiting download.")
+            return
+        download_urls = [self.base_url + f + "#mode=bytes" for f in nc_files]
+
+        logger.info(f"Downloading files for {self.location}...")
+        ds: list[xr.Dataset] = []
+        for f in enumerate(tqdm(download_urls, desc="Downloading datasets")):
+            r = requests.get(f, timeout=(3.05, 120))
+            if r.ok:
+                ds.append(xr.open_dataset(io.BytesIO(r.content)))
+                ds[-1] = ds[-1].swap_dims({"obs": "time"}).squeeze()
+
+        ds = [self._process(di) for di in ds]
+        ds_concat = xr.concat(ds, dim="time")
+        ds_concat = ds_concat.sortby("time")  # ensure data is sorted by time after merging
+        ds_concat = ds_concat.sel(
+            time=slice(self.start_date, self.end_date)
+        )  # subset to specified date range after merging
+        ds_concat = ds_concat.assign_coords(
+            {
+                "latitude": self.location.lat,
+                "longitude": self.location.lon,
+                "site": self.location.site,
+            }
+        )
+        ds_concat = self._update_metadata(ds_concat)
+
+        ds_concat.to_netcdf(self.save_file_path)
+        logger.info(f"Download complete! Dataset saved to {self.save_file_path}")

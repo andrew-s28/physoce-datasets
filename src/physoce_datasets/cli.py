@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import click
 
-from .download import EAMooringDownloader, EAProfilerDownloader, EKEDownloader, WindStressDownloader
+from .download import copernicus_marine, era5, ooi_ea
 
 save_dir_option = click.option(
     "--save-dir",
@@ -99,7 +99,7 @@ def _eke(
             based on the dataset name and date range (e.g., "eke_2000-01-01_to_2020-12-31.nc").
 
     """
-    downloader = EKEDownloader(
+    downloader = copernicus_marine.EddyKineticEnergy(
         location=location,
         save_dir=save_dir,
         start_date=start_date,
@@ -167,7 +167,7 @@ def _wind_stress(
             based on the dataset name and date range (e.g., "eke_2000-01-01_to_2020-12-31.nc").
 
     """
-    downloader = WindStressDownloader(
+    downloader = era5.WindStress(
         location=location,
         save_dir=save_dir,
         save_file=save_file,
@@ -178,7 +178,7 @@ def _wind_stress(
 
 
 @cli.command(
-    "ooi-ea-mooring",
+    "ooi-ea-mooring-ctd",
     help="""
     Download moored OOI Endurance Array temperature, salinity, and density datasets.
 
@@ -198,7 +198,7 @@ def _wind_stress(
 @save_file_option
 @start_datetime_option
 @end_datetime_option
-def _ooi_ea_mooring(
+def _ooi_ea_mooring_ctd(
     location: str,
     save_dir: str | None,
     save_file: str | None,
@@ -219,7 +219,7 @@ def _ooi_ea_mooring(
             based on the dataset name and date range (e.g., "ooi_ea_mooring_2000-01-01_to_2020-12-31.nc").
 
     """
-    downloader = EAMooringDownloader(
+    downloader = ooi_ea.MooringCTD(
         location=location,
         save_dir=save_dir,
         save_file=save_file,
@@ -230,9 +230,9 @@ def _ooi_ea_mooring(
 
 
 @cli.command(
-    "ooi-ea-profiler",
+    "ooi-ea-profiler-ctd",
     help="""
-    Download moored OOI Endurance Array temperature, salinity, and density datasets and calculate mixed layer depth and stratification.
+    Download profiler OOI Endurance Array temperature, salinity, and density datasets and calculate mixed layer depth and stratification.
 
     Available sites for the --location argument include (case insensitive):\n
     \t- 'CE01ISSP' (Oregon Inshore)\n
@@ -252,17 +252,17 @@ def _ooi_ea_mooring(
 @save_file_option
 @start_datetime_option
 @end_datetime_option
-def _ooi_ea_profiler(
+def _ooi_ea_profiler_ctd(
     location: str,
     save_dir: str | None,
     save_file: str | None,
     start_date: str | None,
     end_date: str | None,
 ) -> None:
-    """Download moored OOI Endurance Array temperature, salinity, and density datasets and calculate mixed layer depth and stratification.
+    """Download profiler OOI Endurance Array temperature, salinity, and density datasets and calculate mixed layer depth and stratification.
 
     Args:
-        location (str): Location for the dataset, either in the format 'lon,lat' (e.g., '132.0,36.55') for global datasets or as a site name (see sub-command documentation for available sites) for moored datasets.
+        location (str): Location for the dataset, either in the format 'lon,lat' (e.g., '132.0,36.55') for global datasets or as a site name (see sub-command documentation for available sites) for profiler datasets.
         save_dir (str | None): Directory to save the downloaded dataset. If not specified,
             defaults to a "data" directory in the current working directory.
         start_date (str | None): Start date for the dataset. Format should be YYYY-MM-DD.
@@ -273,7 +273,61 @@ def _ooi_ea_profiler(
             based on the dataset name and date range (e.g., "ooi_ea_profiler_2000-01-01_to_2020-12-31.nc").
 
     """
-    downloader = EAProfilerDownloader(
+    downloader = ooi_ea.ProfilerCTD(
+        location=location,
+        save_dir=save_dir,
+        save_file=save_file,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    downloader.download()
+
+
+@cli.command(
+    "ooi-ea-profiler-chl",
+    help="""
+    Download profiler OOI Endurance Array chlorophyll datasets.
+
+    Available sites for the --location argument include (case insensitive):\n
+    \t- 'CE01ISSP' (Oregon Inshore)\n
+    \t- 'CE02SHSP' (Oregon Shelf)\n
+    \t- 'CE04OSPS' (Oregon Offshore Shallow)\n
+    \t- 'CE04OSPD' (Oregon Offshore Deep)\n
+    \t- 'CE06ISSP' (Washington Inshore)\n
+    \t- 'CE07SHSP' (Washington Shelf)\n
+    \t- 'CE09OSPM' (Washington Offshore)\n
+    \t- 'RS01SBPS' (Oregon Slope Base Shallow)\n
+
+    Please see the OOI Endurance Array documentation for more information on these sites: https://oceanobservatories.org/array/coastal-endurance/.
+    """,
+)
+@location_option
+@save_dir_option
+@save_file_option
+@start_datetime_option
+@end_datetime_option
+def _ooi_ea_profiler_chl(
+    location: str,
+    save_dir: str | None,
+    save_file: str | None,
+    start_date: str | None,
+    end_date: str | None,
+) -> None:
+    """Download profiler OOI Endurance Array chlorophyll datasets.
+
+    Args:
+        location (str): Location for the dataset, either in the format 'lon,lat' (e.g., '132.0,36.55') for global datasets or as a site name (see sub-command documentation for available sites) for profiler datasets.
+        save_dir (str | None): Directory to save the downloaded dataset. If not specified,
+            defaults to a "data" directory in the current working directory.
+        start_date (str | None): Start date for the dataset. Format should be YYYY-MM-DD.
+            If not specified, defaults to the earliest available date for the dataset.
+        end_date (str | None): End date for the dataset. Format should be YYYY-MM-DD.
+            If not specified, defaults to the latest available date for the dataset.
+        save_file (str | None): Filename to save the dataset. If not specified, defaults to a filename
+            based on the dataset name and date range (e.g., "ooi_ea_profiler_2000-01-01_to_2020-12-31.nc").
+
+    """
+    downloader = ooi_ea.ProfilerChlorophyll(
         location=location,
         save_dir=save_dir,
         save_file=save_file,

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import warnings
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import click
 import copernicusmarine
@@ -13,12 +13,12 @@ import xarray as xr
 
 from physoce_datasets.logging import logger
 
-from ._base import _Downloader
+from ._base import _Downloader, parse_lonlat
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from physoce_datasets.util import LonLat
+__all__ = ["EddyKineticEnergy"]
 
 # supress info logging from copernicusmarine, will handle that ourselves
 logging.getLogger("copernicusmarine").setLevel(logging.ERROR)
@@ -48,7 +48,7 @@ def login_to_copernicus_marine() -> None:
     logger.info("Login successful!")
 
 
-class EKEDownloader(_Downloader):
+class EddyKineticEnergy(_Downloader):
     """Downloader for geostrophic surface eddy kinetic energy (EKE) data from AVISO data through Copernicus Marine."""
 
     def __init__(
@@ -69,16 +69,14 @@ class EKEDownloader(_Downloader):
             save_file (str | None): The file name to save the downloaded dataset. If None, defaults to a name based on the dataset and date range.
 
         """
+        self.location = parse_lonlat(location)
         super().__init__(
-            location=location,
-            location_type="lonlat",
-            save_file_prefix="aviso_eke",
+            save_file_prefix="altimeter_eke_sla",
             save_dir=save_dir,
             save_file=save_file,
             start_date=start_date,
             end_date=end_date,
         )
-        self.location = cast("LonLat", self.location)
 
         login_to_copernicus_marine()
 
