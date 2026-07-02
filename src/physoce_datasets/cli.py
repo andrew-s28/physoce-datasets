@@ -5,6 +5,7 @@ from __future__ import annotations
 import click
 
 from .download import copernicus_marine, era5, ooi_ea
+from .download._base import parse_lonlat
 
 save_dir_option = click.option(
     "--save-dir",
@@ -99,8 +100,10 @@ def _eke(
             based on the dataset name and date range (e.g., "eke_2000-01-01_to_2020-12-31.nc").
 
     """
+    lonlat = parse_lonlat(location)
     downloader = copernicus_marine.EddyKineticEnergy(
-        location=location,
+        longitude=lonlat.lon,
+        latitude=lonlat.lat,
         save_dir=save_dir,
         start_date=start_date,
         end_date=end_date,
@@ -167,8 +170,10 @@ def _wind_stress(
             based on the dataset name and date range (e.g., "eke_2000-01-01_to_2020-12-31.nc").
 
     """
+    lonlat = parse_lonlat(location)
     downloader = era5.WindStress(
-        location=location,
+        longitude=lonlat.lon,
+        latitude=lonlat.lat,
         save_dir=save_dir,
         save_file=save_file,
         start_date=start_date,
@@ -220,7 +225,7 @@ def _ooi_ea_mooring_ctd(
 
     """
     downloader = ooi_ea.MooringCTD(
-        location=location,
+        site=location,
         save_dir=save_dir,
         save_file=save_file,
         start_date=start_date,
@@ -274,7 +279,7 @@ def _ooi_ea_profiler_ctd(
 
     """
     downloader = ooi_ea.ProfilerCTD(
-        location=location,
+        site=location,
         save_dir=save_dir,
         save_file=save_file,
         start_date=start_date,
@@ -328,7 +333,7 @@ def _ooi_ea_profiler_chl(
 
     """
     downloader = ooi_ea.ProfilerChlorophyll(
-        location=location,
+        site=location,
         save_dir=save_dir,
         save_file=save_file,
         start_date=start_date,

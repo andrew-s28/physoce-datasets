@@ -13,7 +13,7 @@ import xarray as xr
 
 from physoce_datasets.logging import logger
 
-from ._base import _Downloader, parse_lonlat
+from ._base import LonLat, _Downloader
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -53,7 +53,8 @@ class EddyKineticEnergy(_Downloader):
 
     def __init__(
         self,
-        location: str,
+        longitude: float,
+        latitude: float,
         start_date: str | None = None,
         end_date: str | None = None,
         save_dir: str | None = None,
@@ -62,14 +63,15 @@ class EddyKineticEnergy(_Downloader):
         """Initialize the EKE downloader.
 
         Args:
-            location (str): Location for the dataset in the format 'lon,lat' (e.g., '132.0,36.55'). Required.
+            longitude (float): The longitude coordinate for the dataset location. Required.
+            latitude (float): The latitude coordinate for the dataset location. Required.
             start_date (str | None): The start date for the dataset in "YYYY-MM-DD" format. If None, defaults to "2000-01-01".
             end_date (str | None): The end date for the dataset in "YYYY-MM-DD" format. If None, defaults to the current date.
             save_dir (str | None): The directory to save the downloaded dataset. If None, defaults to a "data" directory in the current working directory.
             save_file (str | None): The file name to save the downloaded dataset. If None, defaults to a name based on the dataset and date range.
 
         """
-        self.location = parse_lonlat(location)
+        self.location = LonLat(lon=longitude, lat=latitude)
         super().__init__(
             save_file_prefix="altimeter_eke_sla",
             save_dir=save_dir,

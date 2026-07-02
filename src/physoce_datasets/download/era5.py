@@ -18,7 +18,7 @@ from pycoare import coare_35
 
 from physoce_datasets.logging import logger
 
-from ._base import _Downloader, parse_lonlat
+from ._base import LonLat, _Downloader
 
 __all__ = ["WindStress"]
 
@@ -79,14 +79,15 @@ class WindStress(_Downloader):
 
     def __init__(
         self,
-        location: str,
+        latitude: float,
+        longitude: float,
         start_date: str | None = None,
         end_date: str | None = None,
         save_dir: str | None = None,
         save_file: str | None = None,
     ) -> None:
         """Initialize the downloader and set up the ECMWF Data Store client and request state manager."""
-        self.location = parse_lonlat(location)
+        self.location = LonLat(lon=longitude, lat=latitude)
         super().__init__(
             save_file_prefix="era5_reanalysis_wind_stress",
             save_dir=save_dir,

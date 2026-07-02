@@ -657,7 +657,7 @@ class ProfilerCTD(_ProfilerBase):
 
     def __init__(
         self,
-        location: str,
+        site: str,
         start_date: str | None = None,
         end_date: str | None = None,
         save_dir: str | None = None,
@@ -666,7 +666,7 @@ class ProfilerCTD(_ProfilerBase):
         """Initialize the EAProfilerDownloader with parameters for downloading.
 
         Args:
-            location (str): Location for the dataset in the form of a site identifier (e.g., "CE01ISSP"). Must be one of the following: "CE01ISSP", "CE02SHSP", "CE04OSPS", "CE04OSPD", "CE06ISSP", "CE07SHSP", "CE09OSPM", "RS01SBPS". Required.
+            site (str): Site identifier for the dataset (e.g., "CE01ISSP"). Must be one of the following: "CE01ISSP", "CE02SHSP", "CE04OSPS", "CE04OSPD", "CE06ISSP", "CE07SHSP", "CE09OSPM", "RS01SBPS". Required.
             start_date (str | None): The start date for the dataset in "YYYY-MM-DD" format. If None, defaults to "2000-01-01".
             end_date (str | None): The end date for the dataset in "YYYY-MM-DD" format. If None, defaults to the current date.
             save_dir (str | None): The directory to save the downloaded dataset. If None, defaults to a "data" directory in the current working directory.
@@ -674,7 +674,7 @@ class ProfilerCTD(_ProfilerBase):
 
         """
         super().__init__(
-            location=location,
+            location=site,
             instrument="ctd",
             save_dir=save_dir,
             save_file=save_file,
@@ -959,7 +959,7 @@ class ProfilerChlorophyll(_ProfilerBase):
 
     def __init__(
         self,
-        location: str,
+        site: str,
         start_date: str | None = None,
         end_date: str | None = None,
         save_dir: str | None = None,
@@ -968,7 +968,7 @@ class ProfilerChlorophyll(_ProfilerBase):
         """Initialize the EAProfilerDownloader with parameters for downloading.
 
         Args:
-            location (str): Location for the dataset in the form of a site identifier (e.g., "CE01ISSP"). Must be one of the following: "CE01ISSP", "CE02SHSP", "CE04OSPS", "CE06ISSP", "CE07SHSP", "CE09OSPM", "RS01SBPS". Required.
+            site (str): Site identifier for the dataset (e.g., "CE01ISSP"). Must be one of the following: "CE01ISSP", "CE02SHSP", "CE04OSPS", "CE06ISSP", "CE07SHSP", "CE09OSPM", "RS01SBPS". Required.
             start_date (str | None): The start date for the dataset in "YYYY-MM-DD" format. If None, defaults to "2000-01-01".
             end_date (str | None): The end date for the dataset in "YYYY-MM-DD" format. If None, defaults to the current date.
             save_dir (str | None): The directory to save the downloaded dataset. If None, defaults to a "data" directory in the current working directory.
@@ -976,7 +976,7 @@ class ProfilerChlorophyll(_ProfilerBase):
 
         """
         super().__init__(
-            location=location,
+            location=site,
             instrument="chl",
             save_dir=save_dir,
             save_file=save_file,
@@ -1127,7 +1127,7 @@ class MooringCTD(_MooringBase):
 
     def __init__(
         self,
-        location: str,
+        site: str,
         start_date: str | None = None,
         end_date: str | None = None,
         save_dir: str | None = None,
@@ -1136,7 +1136,7 @@ class MooringCTD(_MooringBase):
         """Initialize the EAMooringDownloader with parameters for downloading.
 
         Args:
-            location (str): Location for the dataset in the form of a site identifier (e.g., "CE01ISSM"). Must be one of the following: "CE01ISSM", "CE02SHSM", "CE04OSSM", "CE06ISSM", "CE07SHSM", "CE09OSSM". Required.
+            site (str): Site identifier for the dataset (e.g., "CE01ISSM"). Must be one of the following: "CE01ISSM", "CE02SHSM", "CE04OSSM", "CE06ISSM", "CE07SHSM", "CE09OSSM". Required.
             start_date (str | None): The start date for the dataset in "YYYY-MM-DD" format. If None, defaults to "2000-01-01".
             end_date (str | None): The end date for the dataset in "YYYY-MM-DD" format. If None, defaults to the current date.
             save_dir (str | None): The directory to save the downloaded dataset. If None, defaults to a "data" directory in the current working directory.
@@ -1144,7 +1144,7 @@ class MooringCTD(_MooringBase):
 
         """
         super().__init__(
-            location=location,
+            location=site,
             save_dir=save_dir,
             save_file=save_file,
             start_date=start_date,
