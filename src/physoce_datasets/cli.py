@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import click
 
-from .download import EAMooringDownloader, EAProfilerDownloader, EKEDownloader, WindStressDownloader
+from .download import copernicus_marine, era5, ooi_ea
+from .download._base import parse_lonlat
 
 save_dir_option = click.option(
     "--save-dir",
@@ -69,7 +70,15 @@ def cli(ctx: click.Context) -> None:
         click.echo("No subcommand specified. Use --help for more information.")
 
 
-@cli.command(
+@click.group("copernicus-marine", help="Commands for downloading Copernicus Marine datasets.")
+@click.pass_context
+def _copernicus_marine(ctx: click.Context) -> None:
+    """Commands for downloading Copernicus Marine datasets."""
+    if ctx.invoked_subcommand is None:
+        click.echo("No subcommand specified. Use --help for more information.")
+
+
+@_copernicus_marine.command(
     "eke",
     help="Download geostrophic velocities and compute eddy kinetic energy from Copernicus Marine Services.",
 )
@@ -99,8 +108,10 @@ def _eke(
             based on the dataset name and date range (e.g., "eke_2000-01-01_to_2020-12-31.nc").
 
     """
-    downloader = EKEDownloader(
-        location=location,
+    lonlat = parse_lonlat(location)
+    downloader = copernicus_marine.EddyKineticEnergy(
+        longitude=lonlat.lon,
+        latitude=lonlat.lat,
         save_dir=save_dir,
         start_date=start_date,
         end_date=end_date,
@@ -109,7 +120,15 @@ def _eke(
     downloader.download()
 
 
-@cli.command("sst", help="Download NASA MUR SST datasets.")
+@click.group("nasa", help="Commands for downloading NASA datasets.")
+@click.pass_context
+def _nasa(ctx: click.Context) -> None:
+    """Commands for downloading NASA datasets."""
+    if ctx.invoked_subcommand is None:
+        click.echo("No subcommand specified. Use --help for more information.")
+
+
+@_nasa.command("sst", help="Download NASA MUR SST datasets.")
 @location_option
 @save_dir_option
 @save_file_option
@@ -140,7 +159,15 @@ def _sst(
     raise NotImplementedError(msg)
 
 
-@cli.command("wind-stress", help="Download wind velocity and compute wind stress from ERA5.")
+@cli.group("era5", help="Commands for downloading ERA5 datasets.")
+@click.pass_context
+def _era5(ctx: click.Context) -> None:
+    """Commands for downloading ERA5 datasets."""
+    if ctx.invoked_subcommand is None:
+        click.echo("No subcommand specified. Use --help for more information.")
+
+
+@_era5.command("wind-stress", help="Download wind velocity and compute wind stress from ERA5.")
 @location_option
 @save_dir_option
 @save_file_option
@@ -167,8 +194,10 @@ def _wind_stress(
             based on the dataset name and date range (e.g., "eke_2000-01-01_to_2020-12-31.nc").
 
     """
-    downloader = WindStressDownloader(
-        location=location,
+    lonlat = parse_lonlat(location)
+    downloader = era5.WindStress(
+        longitude=lonlat.lon,
+        latitude=lonlat.lat,
         save_dir=save_dir,
         save_file=save_file,
         start_date=start_date,
@@ -177,8 +206,16 @@ def _wind_stress(
     downloader.download()
 
 
-@cli.command(
-    "ooi-ea-mooring",
+@cli.group("ooi-ea", help="Commands for downloading OOI Endurance Array datasets.")
+@click.pass_context
+def _ooi_ea(ctx: click.Context) -> None:
+    """Commands for downloading OOI Endurance Array datasets."""
+    if ctx.invoked_subcommand is None:
+        click.echo("No subcommand specified. Use --help for more information.")
+
+
+@_ooi_ea.command(
+    "mooring-ctd",
     help="""
     Download moored OOI Endurance Array temperature, salinity, and density datasets.
 
@@ -198,7 +235,7 @@ def _wind_stress(
 @save_file_option
 @start_datetime_option
 @end_datetime_option
-def _ooi_ea_mooring(
+def _ooi_ea_mooring_ctd(
     location: str,
     save_dir: str | None,
     save_file: str | None,
@@ -219,8 +256,8 @@ def _ooi_ea_mooring(
             based on the dataset name and date range (e.g., "ooi_ea_mooring_2000-01-01_to_2020-12-31.nc").
 
     """
-    downloader = EAMooringDownloader(
-        location=location,
+    downloader = ooi_ea.MooringCTD(
+        site=location,
         save_dir=save_dir,
         save_file=save_file,
         start_date=start_date,
@@ -229,10 +266,10 @@ def _ooi_ea_mooring(
     downloader.download()
 
 
-@cli.command(
-    "ooi-ea-profiler",
+@_ooi_ea.command(
+    "profiler-ctd",
     help="""
-    Download moored OOI Endurance Array temperature, salinity, and density datasets and calculate mixed layer depth and stratification.
+    Download profiler OOI Endurance Array temperature, salinity, and density datasets and calculate mixed layer depth and stratification.
 
     Available sites for the --location argument include (case insensitive):\n
     \t- 'CE01ISSP' (Oregon Inshore)\n
@@ -252,17 +289,17 @@ def _ooi_ea_mooring(
 @save_file_option
 @start_datetime_option
 @end_datetime_option
-def _ooi_ea_profiler(
+def _ooi_ea_profiler_ctd(
     location: str,
     save_dir: str | None,
     save_file: str | None,
     start_date: str | None,
     end_date: str | None,
 ) -> None:
-    """Download moored OOI Endurance Array temperature, salinity, and density datasets and calculate mixed layer depth and stratification.
+    """Download profiler OOI Endurance Array temperature, salinity, and density datasets and calculate mixed layer depth and stratification.
 
     Args:
-        location (str): Location for the dataset, either in the format 'lon,lat' (e.g., '132.0,36.55') for global datasets or as a site name (see sub-command documentation for available sites) for moored datasets.
+        location (str): Location for the dataset, either in the format 'lon,lat' (e.g., '132.0,36.55') for global datasets or as a site name (see sub-command documentation for available sites) for profiler datasets.
         save_dir (str | None): Directory to save the downloaded dataset. If not specified,
             defaults to a "data" directory in the current working directory.
         start_date (str | None): Start date for the dataset. Format should be YYYY-MM-DD.
@@ -273,8 +310,62 @@ def _ooi_ea_profiler(
             based on the dataset name and date range (e.g., "ooi_ea_profiler_2000-01-01_to_2020-12-31.nc").
 
     """
-    downloader = EAProfilerDownloader(
-        location=location,
+    downloader = ooi_ea.ProfilerCTD(
+        site=location,
+        save_dir=save_dir,
+        save_file=save_file,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    downloader.download()
+
+
+@_ooi_ea.command(
+    "profiler-chl",
+    help="""
+    Download profiler OOI Endurance Array chlorophyll datasets.
+
+    Available sites for the --location argument include (case insensitive):\n
+    \t- 'CE01ISSP' (Oregon Inshore)\n
+    \t- 'CE02SHSP' (Oregon Shelf)\n
+    \t- 'CE04OSPS' (Oregon Offshore Shallow)\n
+    \t- 'CE04OSPD' (Oregon Offshore Deep)\n
+    \t- 'CE06ISSP' (Washington Inshore)\n
+    \t- 'CE07SHSP' (Washington Shelf)\n
+    \t- 'CE09OSPM' (Washington Offshore)\n
+    \t- 'RS01SBPS' (Oregon Slope Base Shallow)\n
+
+    Please see the OOI Endurance Array documentation for more information on these sites: https://oceanobservatories.org/array/coastal-endurance/.
+    """,
+)
+@location_option
+@save_dir_option
+@save_file_option
+@start_datetime_option
+@end_datetime_option
+def _ooi_ea_profiler_chl(
+    location: str,
+    save_dir: str | None,
+    save_file: str | None,
+    start_date: str | None,
+    end_date: str | None,
+) -> None:
+    """Download profiler OOI Endurance Array chlorophyll datasets.
+
+    Args:
+        location (str): Location for the dataset, either in the format 'lon,lat' (e.g., '132.0,36.55') for global datasets or as a site name (see sub-command documentation for available sites) for profiler datasets.
+        save_dir (str | None): Directory to save the downloaded dataset. If not specified,
+            defaults to a "data" directory in the current working directory.
+        start_date (str | None): Start date for the dataset. Format should be YYYY-MM-DD.
+            If not specified, defaults to the earliest available date for the dataset.
+        end_date (str | None): End date for the dataset. Format should be YYYY-MM-DD.
+            If not specified, defaults to the latest available date for the dataset.
+        save_file (str | None): Filename to save the dataset. If not specified, defaults to a filename
+            based on the dataset name and date range (e.g., "ooi_ea_profiler_2000-01-01_to_2020-12-31.nc").
+
+    """
+    downloader = ooi_ea.ProfilerChlorophyll(
+        site=location,
         save_dir=save_dir,
         save_file=save_file,
         start_date=start_date,

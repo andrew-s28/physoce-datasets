@@ -33,7 +33,7 @@ Once you've added `physoce-datasets` to your project, you can import any of the 
 
 ```python
 # note the import uses underscore in place of dash
-from physoce_datasets import EKEDownloader, SSTDownloader, WindStressDownloader
+from physoce_datasets import copernicus_marine, era5, ooi_ea
 ```
 
 Alternatively, you can run the command line interface from anywhere using [uv tools](https://docs.astral.sh/uv/guides/tools/):
@@ -75,21 +75,41 @@ Note that if you prefer the `pip` environment management, activate your environm
 python physoce-datasets --help
 ```
 
-Available commands:
+Top level commands are based on providing agency or program:
 
-- `eke`: Download altimetry-derived geostrophic velocities and compute eddy kinetic energy from Copernicus Marine Services.
-- `wind-stress`: Download ERA5 wind velocities and compute wind stress using the [COARE 3.5 algorithm](https://github.com/pyCOARE/coare).
-- `sst`: Download NASA Multi-scale Ultra-high Resolution (MUR) sea surface temperature.
+- `copernicus-marine`: Data from [Copernicus Marine Services](https://marine.copernicus.eu/?pk_vid=f1c2c33510b8f44b178301966049ffbe).
+- `era5`: Data from [ERA5 single levels](https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels?tab=overview).
+- `nasa`: Data from NASA Harmony API. **Currently not implemented due to issues with the API, see warning above**.
+- `ooi-ea`: Data from [NSF Ocean Observatories Initiative Endurance Array](https://oceanobservatories.org/array/coastal-endurance/).
 
-Show command help:
+Show provider command help, which will include available datasets for downloading:
 
 ```bash
-uv run physoce-datasets eke --help
+uv run physoce-datasets ooi-ea --help
 ```
+
+The specific dataset to download is specified after the provider:
+
+```bash
+uv run physoce-datasets ooi-ea profiler-chl --help
+```
+
+Available datasets are currently as follows:
+
+- `copernicus-marine`
+  - `eke`: Eddy kinetic energy derived from altimetric sea surface height anomalies.
+- `era5`
+  - `wind-stress`: Wind stress derived from ERA5 10 m winds using the [COARE 3.5 algorithm](https://github.com/pyCOARE/coare).
+- `nasa`
+  - `sst`: Multi-scale Ultra-high Resolution (MUR) sea surface temperature. **Currently not implemented due to issues with the API, see warning above**.
+- `ooi-ea`
+  - `mooring-ctd`: Temperature, salinity, pressure, and density derived from mooring-mounted CTDs.
+  - `profiler-ctd`: Mixed layer depth and stratification derived from temperature, salinity, pressure, and density from profiler-mounted CTDs.
+  - `profiler-chl`: Chlorophyll *a* derived from profiler-mounted fluorometers.
 
 ### Options
 
-All commands share the same base options:
+All command line interfaces share the same base options:
 
 - `--location`: Location for the dataset in the format 'lon,lat' (e.g., '-132.0,36.55'). **Required for all commands!**
 - `--save-dir`: Directory where the dataset file is written. If not set, defaults to `.data/`, relative to the current working directory.
@@ -102,27 +122,28 @@ All commands share the same base options:
 Run `eke` download with defaults:
 
 ```bash
-uv run physoce-datasets eke
+uv run physoce-datasets copernicus-marine eke
 ```
 
 Run `wind-stress` with specified options:
 
 ```bash
-uv run physoce-datasets wind-stress --save-dir data --save-file wind-stress.nc --start-date 2020-01-01 --end-date 2020-01-31 --area -140,-120,30,50
+uv run physoce-datasets era5 wind-stress --save-dir data --save-file wind-stress.nc --start-date 2020-01-01 --end-date 2020-01-31 --location -130,45
 ```
 
 ## Python Interface
 
 Downloaders can also be used within Python scripts and Python notebooks as well.
 
-Importing and initializing the classes takes the same arguments as the command line interface:
+Importing and initializing the classes takes similar arguments as the command line interface:
 
 ```python
-from physoce_datasets import EKEDownloader
+from physoce_datasets import copernicus_marine
 
 # initialize the downloader
-eke_downloader = EKEDownloader(
-    location="-130,45",
+eke_downloader = copernicus_marine.EddyKineticEnergy(
+    latitude=45,
+    longitude=-130,
     start_date="2020-01-01",
     end_date="2020-12-31",
     save_dir="data",
@@ -136,7 +157,28 @@ eke_downloader.download()
 ds = eke_downloader.open_dataset(**kwargs)
 ```
 
-`WindStressDownloader` and `SSTDownloader` follow the exact same interface.
+`era5` and `nasa` downloaders follow the exact same interface.
+
+The OOI Endurance Array downloaders follow a slightly different notation, using the `site` argument rather than `latitude` and `longitude`:
+
+```python
+from physoce_datasets import ooi_ea
+
+# initialize the downloader
+eke_downloader = ooi_ea.ProfilerCTD(
+    site="CE02SHSP",  # case insensitive
+    start_date="2020-01-01",
+    end_date="2020-12-31",
+    save_dir="data",
+    save_file="eke.nc",
+)
+```
+
+Available profiler sites are `CE01ISSP`, `CE02SHSP`, `CE04OSPS`, `CE04OSPD`, `CE06ISSP`, `CE07SHSP`, `CE09OSPM`, and `RS01SBPS`.
+
+Available mooring sites are `CE01ISSM`, `CE02SHSM`, `CE04OSSM`, `CE06ISSM`, `CE07SHSM`, and `CE09OSSM`.
+
+More information on these sites can be found at the [OOI Endurance Array](https://oceanobservatories.org/array/coastal-endurance/), the [OOI Cabled Endurance Array](https://oceanobservatories.org/array/cabled-and-endurance-arrays/), and the [OOI Cabled Continental Margin Array](https://oceanobservatories.org/array/cabled-continental-margin-array/) sites.
 
 If you'd like to turn off logging in scripts, you can do so with the [Python standard library `logging` module](https://docs.python.org/3/library/logging.html):
 

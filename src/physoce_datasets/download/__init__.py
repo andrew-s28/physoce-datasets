@@ -1,12 +1,5 @@
-"""Module for downloading physical oceanographic datasets.
+"""Module for downloading physical oceanographic datasets and calculating derived quantities."""
 
-This module also processes downloaded data into xarray Datasets with
-appropriate metadata.
-"""
+from . import copernicus_marine, era5, ooi_ea
 
-from .eke import EKEDownloader
-from .ooi import EAMooringDownloader, EAProfilerDownloader
-from .sst import SSTDownloader
-from .wind_stress import WindStressDownloader
-
-__all__ = ["EAMooringDownloader", "EAProfilerDownloader", "EKEDownloader", "SSTDownloader", "WindStressDownloader"]
+__all__ = ["copernicus_marine", "era5", "ooi_ea"]

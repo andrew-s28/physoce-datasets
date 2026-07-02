@@ -1,14 +1,11 @@
 """Functions for downloading and processing ERA5 reanalysis data from the ECMWF Data Store."""
 
-from __future__ import annotations
-
 import contextlib
 import os
 from datetime import UTC, datetime
 from functools import partial
 from pathlib import Path
 from time import sleep
-from typing import TYPE_CHECKING, cast
 from zipfile import ZipFile
 
 import click
@@ -21,10 +18,9 @@ from pycoare import coare_35
 
 from physoce_datasets.logging import logger
 
-from ._base import _Downloader
+from ._base import LonLat, _Downloader
 
-if TYPE_CHECKING:
-    from physoce_datasets.util import LonLat
+__all__ = ["WindStress"]
 
 CONFIG_FILE = Path.home() / ".ecmwfdatastoresrc"
 
@@ -78,28 +74,27 @@ def login_to_ecmwf_datastore() -> Client:
     return client
 
 
-class WindStressDownloader(_Downloader):
+class WindStress(_Downloader):
     """Downloader for ERA5-based wind stress datasets from the ECMWF Data Store."""
 
     def __init__(
         self,
-        location: str,
+        latitude: float,
+        longitude: float,
         start_date: str | None = None,
         end_date: str | None = None,
         save_dir: str | None = None,
         save_file: str | None = None,
     ) -> None:
         """Initialize the downloader and set up the ECMWF Data Store client and request state manager."""
+        self.location = LonLat(lon=longitude, lat=latitude)
         super().__init__(
-            location=location,
-            location_type="lonlat",
             save_file_prefix="era5_reanalysis_wind_stress",
             save_dir=save_dir,
             save_file=save_file,
             start_date=start_date,
             end_date=end_date,
         )
-        self.location = cast("LonLat", self.location)
 
         self.client = login_to_ecmwf_datastore()
 
