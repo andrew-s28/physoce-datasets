@@ -70,7 +70,15 @@ def cli(ctx: click.Context) -> None:
         click.echo("No subcommand specified. Use --help for more information.")
 
 
-@cli.command(
+@click.group("copernicus-marine", help="Commands for downloading Copernicus Marine datasets.")
+@click.pass_context
+def _copernicus_marine(ctx: click.Context) -> None:
+    """Commands for downloading Copernicus Marine datasets."""
+    if ctx.invoked_subcommand is None:
+        click.echo("No subcommand specified. Use --help for more information.")
+
+
+@_copernicus_marine.command(
     "eke",
     help="Download geostrophic velocities and compute eddy kinetic energy from Copernicus Marine Services.",
 )
@@ -112,7 +120,15 @@ def _eke(
     downloader.download()
 
 
-@cli.command("sst", help="Download NASA MUR SST datasets.")
+@click.group("nasa", help="Commands for downloading NASA datasets.")
+@click.pass_context
+def _nasa(ctx: click.Context) -> None:
+    """Commands for downloading NASA datasets."""
+    if ctx.invoked_subcommand is None:
+        click.echo("No subcommand specified. Use --help for more information.")
+
+
+@_nasa.command("sst", help="Download NASA MUR SST datasets.")
 @location_option
 @save_dir_option
 @save_file_option
@@ -143,7 +159,15 @@ def _sst(
     raise NotImplementedError(msg)
 
 
-@cli.command("wind-stress", help="Download wind velocity and compute wind stress from ERA5.")
+@cli.group("era5", help="Commands for downloading ERA5 datasets.")
+@click.pass_context
+def _era5(ctx: click.Context) -> None:
+    """Commands for downloading ERA5 datasets."""
+    if ctx.invoked_subcommand is None:
+        click.echo("No subcommand specified. Use --help for more information.")
+
+
+@_era5.command("wind-stress", help="Download wind velocity and compute wind stress from ERA5.")
 @location_option
 @save_dir_option
 @save_file_option
@@ -182,8 +206,16 @@ def _wind_stress(
     downloader.download()
 
 
-@cli.command(
-    "ooi-ea-mooring-ctd",
+@cli.group("ooi-ea", help="Commands for downloading OOI Endurance Array datasets.")
+@click.pass_context
+def _ooi_ea(ctx: click.Context) -> None:
+    """Commands for downloading OOI Endurance Array datasets."""
+    if ctx.invoked_subcommand is None:
+        click.echo("No subcommand specified. Use --help for more information.")
+
+
+@_ooi_ea.command(
+    "mooring-ctd",
     help="""
     Download moored OOI Endurance Array temperature, salinity, and density datasets.
 
@@ -234,8 +266,8 @@ def _ooi_ea_mooring_ctd(
     downloader.download()
 
 
-@cli.command(
-    "ooi-ea-profiler-ctd",
+@_ooi_ea.command(
+    "profiler-ctd",
     help="""
     Download profiler OOI Endurance Array temperature, salinity, and density datasets and calculate mixed layer depth and stratification.
 
@@ -288,8 +320,8 @@ def _ooi_ea_profiler_ctd(
     downloader.download()
 
 
-@cli.command(
-    "ooi-ea-profiler-chl",
+@_ooi_ea.command(
+    "profiler-chl",
     help="""
     Download profiler OOI Endurance Array chlorophyll datasets.
 
