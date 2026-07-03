@@ -1,4 +1,4 @@
-"""Functions for downloading and processing satellite altimetry data from Copernicus Marine."""
+"""Download and process data from [Copernicus Marine Data Store](https://data.marine.copernicus.eu/products)."""
 
 from __future__ import annotations
 
@@ -145,7 +145,7 @@ class EddyKineticEnergy(_Downloader):
         # https://www.aviso.altimetry.fr/fileadmin/documents/data/tools/monthly_mean_eke_hdbk.pdf
         ds["eke"] = 1 / 2 * (ds["ugosa"] ** 2 + ds["vgosa"] ** 2)
 
-        ds = self.update_metadata(ds)
+        ds = self._update_metadata(ds)
 
         logger.info("Downloading...")
         # strange warning being thrown by xarray when saving to netcdf4
@@ -167,7 +167,7 @@ class EddyKineticEnergy(_Downloader):
         logger.info(f"Download complete! Dataset saved to {self.save_file_path}")
 
     @staticmethod
-    def update_metadata(ds: xr.Dataset) -> xr.Dataset:
+    def _update_metadata(ds: xr.Dataset) -> xr.Dataset:
         """Update the metadata of the dataset to include standard names, long names, units, and other relevant attributes.
 
         Args:

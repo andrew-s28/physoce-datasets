@@ -215,10 +215,10 @@ class _Downloader(ABC):
             **kwargs: Additional keyword arguments to pass to `xr.open_dataset()`.
 
         Returns:
-            xr.Dataset: The downloaded dataset as an xarray Dataset.
+            The downloaded dataset.
 
         Raises:
-            ValueError: If the `save_file` attribute is not set.
+            ValueError: If the file has not been downloaded or the save file cannot be found.
 
         """
         if self.save_file is None:
