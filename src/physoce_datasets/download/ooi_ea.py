@@ -113,14 +113,14 @@ class ProfilerSites(StrEnum):
 
     """
 
-    CE01ISSP = "ce01issp"
-    CE02SHSP = "ce02shsp"
-    CE04OSPS = "ce04osps"
-    CE04OSPD = "ce04ospd"
-    CE06ISSP = "ce06issp"
-    CE07SHSP = "ce07shsp"
-    CE09OSPM = "ce09ospm"
-    RS01SBPS = "rs01sbps"
+    CE01ISSP = "CE01ISSP"
+    CE02SHSP = "CE02SHSP"
+    CE04OSPS = "CE04OSPS"
+    CE04OSPD = "CE04OSPD"
+    CE06ISSP = "CE06ISSP"
+    CE07SHSP = "CE07SHSP"
+    CE09OSPM = "CE09OSPM"
+    RS01SBPS = "RS01SBPS"
 
 
 class MooringSites(StrEnum):
@@ -137,12 +137,12 @@ class MooringSites(StrEnum):
 
     """
 
-    CE01ISSM = "ce01issm"
-    CE02SHSM = "ce02shsm"
-    CE04OSSM = "ce04ossm"
-    CE06ISSM = "ce06issm"
-    CE07SHSM = "ce07shsm"
-    CE09OSSM = "ce09ossm"
+    CE01ISSM = "CE01ISSM"
+    CE02SHSM = "CE02SHSM"
+    CE04OSSM = "CE04OSSM"
+    CE06ISSM = "CE06ISSM"
+    CE07SHSM = "CE07SHSM"
+    CE09OSSM = "CE09OSSM"
 
 
 class _OOISiteInfo(TypedDict):
@@ -368,9 +368,9 @@ class _OOISite:
             location_type (str): The type of location for the site. Required.
 
         """
-        self.site = site.lower()
-        self.instrument = instrument.lower()
-        self.location_type = location_type.lower()
+        self.site = site.upper()
+        self.instrument = instrument
+        self.location_type = location_type
 
         self.validate()
 
@@ -441,7 +441,7 @@ class _OOISite:
         lon_str = f"{-self.lon:.0f}W" if self.lon < 0 else f"{self.lon:.0f}E"
         lat_str = f"{-self.lat:.0f}S" if self.lat < 0 else f"{self.lat:.0f}N"
         return (
-            f"OOISite(site='{self.site.upper()}', short_name='{self.short_name}', refdes='{self.refdes}', method='{self.method}', "
+            f"OOISite(site='{self.site}', short_name='{self.short_name}', refdes='{self.refdes}', method='{self.method}', "
             f"instrument='{self.instrument}', latitude={lat_str}, longitude={lon_str})"
         )
 
@@ -452,7 +452,7 @@ class _OOISite:
             str: A string representation of the OOISite in the format 'OOI EA Site {site} {short_name}'.
 
         """
-        return f"OOI EA Site {self.site.upper()} {self.short_name}"
+        return f"OOI EA Site {self.site} {self.short_name}"
 
     @property
     def search_url(self) -> str:
@@ -463,7 +463,7 @@ class _OOISite:
     @property
     def file_name(self) -> str:
         """Convert the profiler site and name to a string format suitable for filenames in the format '{site}_{short_name}'."""
-        return f"{self.site.upper()}_{self.short_name}"
+        return f"{self.site}_{self.short_name}"
 
 
 class _OOIBase(_Downloader):
@@ -479,7 +479,7 @@ class _OOIBase(_Downloader):
         start_date: str | None = None,
         end_date: str | None = None,
     ) -> None:
-        site = site.value if isinstance(site, ProfilerSites | MooringSites) else site.lower()
+        site = site.value if isinstance(site, ProfilerSites | MooringSites) else site.upper()
         self.location = _OOISite(site=site, instrument=instrument, location_type=location_type)
 
         self.search_url = self.location.search_url
@@ -487,7 +487,7 @@ class _OOIBase(_Downloader):
         self.tag = self.location.refdes + r".*.nc$"  # setup regex for files we want
 
         super().__init__(
-            save_file_prefix=f"ooi_{location_type}_{site.lower()}_{instrument}",
+            save_file_prefix=f"ooi_{location_type}_{site}_{instrument}",
             save_dir=save_dir,
             save_file=save_file,
             start_date=start_date,
@@ -996,16 +996,18 @@ class ProfilerCTD(_ProfilerBase):
         ds_binned = ds_binned.interpolate_na(
             dim="time", method="linear", use_coordinate=True, max_gap=np.timedelta64(1, "D")
         )
-        # calculate mixed layer depth using a density threshold of 0.03 kg/m^3
-        ds_binned["mixed_layer_depth_from_density"] = self._threshold_mld(
-            ds_binned["sea_water_density"], threshold_type="density", threshold=0.03
-        )
-        # calculate mixed layer depth using a temperature threshold of 0.2 degree C
-        ds_binned["mixed_layer_depth_from_temperature"] = self._threshold_mld(
-            ds_binned["sea_water_temperature"], threshold_type="temperature", threshold=0.2
-        )
-        # calculate stratification
-        ds_binned["n_squared"] = self._calculate_stratification(ds_binned)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            # calculate mixed layer depth using a density threshold of 0.03 kg/m^3
+            ds_binned["mixed_layer_depth_from_density"] = self._threshold_mld(
+                ds_binned["sea_water_density"], threshold_type="density", threshold=0.03
+            )
+            # calculate mixed layer depth using a temperature threshold of 0.2 degree C
+            ds_binned["mixed_layer_depth_from_temperature"] = self._threshold_mld(
+                ds_binned["sea_water_temperature"], threshold_type="temperature", threshold=0.2
+            )
+            # calculate stratification
+            ds_binned["n_squared"] = self._calculate_stratification(ds_binned)
         # now take daily mean
         ds_binned = ds_binned.resample(time="1D").mean()
 
@@ -1330,7 +1332,7 @@ class MooringCTD(_MooringBase):
 
         logger.info(f"Downloading files for {self.location}...")
         ds: list[xr.Dataset] = []
-        for f in enumerate(tqdm(download_urls, desc="Downloading datasets")):
+        for f in tqdm(download_urls, desc="Downloading datasets"):
             r = requests.get(f, timeout=(3.05, 120))
             if r.ok:
                 ds.append(xr.open_dataset(io.BytesIO(r.content)))
