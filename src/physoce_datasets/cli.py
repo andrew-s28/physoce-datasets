@@ -70,7 +70,7 @@ def cli(ctx: click.Context) -> None:
         click.echo("No subcommand specified. Use --help for more information.")
 
 
-@click.group("copernicus-marine", help="Commands for downloading Copernicus Marine datasets.")
+@cli.group("copernicus-marine", help="Commands for downloading Copernicus Marine datasets.")
 @click.pass_context
 def _copernicus_marine(ctx: click.Context) -> None:
     """Commands for downloading Copernicus Marine datasets."""
@@ -120,7 +120,7 @@ def _eke(
     downloader.download()
 
 
-@click.group("nasa", help="Commands for downloading NASA datasets.")
+# @cli.group("nasa", help="Commands for downloading NASA datasets.")  # NASA datasets not working yet
 @click.pass_context
 def _nasa(ctx: click.Context) -> None:
     """Commands for downloading NASA datasets."""
@@ -128,7 +128,7 @@ def _nasa(ctx: click.Context) -> None:
         click.echo("No subcommand specified. Use --help for more information.")
 
 
-@_nasa.command("sst", help="Download NASA MUR SST datasets.")
+# @_nasa.command("sst", help="Download NASA MUR SST datasets.")  # NASA datasets not working yet
 @location_option
 @save_dir_option
 @save_file_option

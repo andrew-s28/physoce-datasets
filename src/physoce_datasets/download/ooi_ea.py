@@ -1,9 +1,10 @@
-"""Module for downloading datasets from the OOI Endurance Array Mooring."""
+"""Download and process [OOI Endurance Array data](https://oceanobservatories.org/array/coastal-endurance/)."""
 
 import io
 import re
 import warnings
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Literal, TypedDict
 
 import gsw
@@ -96,7 +97,55 @@ VARIABLES_TO_DROP = [
 ]
 
 
-class OOISiteInfo(TypedDict):
+class ProfilerSites(StrEnum):
+    """Representation for valid OOI profiler sites.
+
+    Valid options are:
+
+    - [`CE01ISSP`](https://oceanobservatories.org/site/ce01issp/)
+    - [`CE02SHSP`](https://oceanobservatories.org/site/ce02shsp/)
+    - [`CE04OSPS`](https://oceanobservatories.org/site/ce04osps/)
+    - [`CE04OSPD`](https://oceanobservatories.org/site/ce04ospd/)
+    - [`CE06ISSP`](https://oceanobservatories.org/site/ce06issp/)
+    - [`CE07SHSP`](https://oceanobservatories.org/site/ce07shsp/)
+    - [`CE09OSPM`](https://oceanobservatories.org/site/ce09ospm/)
+    - [`RS01SBPS`](https://oceanobservatories.org/site/rs01sbps/)
+
+    """
+
+    CE01ISSP = "CE01ISSP"
+    CE02SHSP = "CE02SHSP"
+    CE04OSPS = "CE04OSPS"
+    CE04OSPD = "CE04OSPD"
+    CE06ISSP = "CE06ISSP"
+    CE07SHSP = "CE07SHSP"
+    CE09OSPM = "CE09OSPM"
+    RS01SBPS = "RS01SBPS"
+
+
+class MooringSites(StrEnum):
+    """Representation for valid OOI mooring sites.
+
+    Valid options are:
+
+    - [`CE01ISSM`](https://oceanobservatories.org/site/ce01issm/)
+    - [`CE02SHSM`](https://oceanobservatories.org/site/ce02shsm/)
+    - [`CE04OSSM`](https://oceanobservatories.org/site/ce04ossm/)
+    - [`CE06ISSM`](https://oceanobservatories.org/site/ce06issm/)
+    - [`CE07SHSM`](https://oceanobservatories.org/site/ce07shsm/)
+    - [`CE09OSSM`](https://oceanobservatories.org/site/ce09ossm/)
+
+    """
+
+    CE01ISSM = "CE01ISSM"
+    CE02SHSM = "CE02SHSM"
+    CE04OSSM = "CE04OSSM"
+    CE06ISSM = "CE06ISSM"
+    CE07SHSM = "CE07SHSM"
+    CE09OSSM = "CE09OSSM"
+
+
+class _OOISiteInfo(TypedDict):
     """A dictionary representing the information for an OOI site, including its reference designator, method, instrument, and geographic coordinates."""
 
     refdes: str
@@ -108,8 +157,8 @@ class OOISiteInfo(TypedDict):
     depth: float
 
 
-OOI_MOORINGS_CTD: dict[str, OOISiteInfo] = {
-    "ce01issm": {
+OOI_MOORINGS_CTD: dict[MooringSites, _OOISiteInfo] = {
+    MooringSites.CE01ISSM: {
         "refdes": "CE01ISSM-RID16-03-CTDBPC000",
         "method": "recovered_inst",
         "instrument": "ctdbp_cdef_instrument_recovered",
@@ -118,7 +167,7 @@ OOI_MOORINGS_CTD: dict[str, OOISiteInfo] = {
         "lon": -124.095,
         "depth": 25,
     },
-    "ce02shsm": {
+    MooringSites.CE02SHSM: {
         "refdes": "CE02SHSM-RID27-03-CTDBPC000",
         "method": "recovered_inst",
         "instrument": "ctdbp_cdef_instrument_recovered",
@@ -127,7 +176,7 @@ OOI_MOORINGS_CTD: dict[str, OOISiteInfo] = {
         "lon": -124.304,
         "depth": 80,
     },
-    "ce04ossm": {
+    MooringSites.CE04OSSM: {
         "refdes": "CE04OSSM-RID27-03-CTDBPC000",
         "method": "recovered_inst",
         "instrument": "ctdbp_cdef_instrument_recovered",
@@ -136,7 +185,7 @@ OOI_MOORINGS_CTD: dict[str, OOISiteInfo] = {
         "lon": -124.956,
         "depth": 588,
     },
-    "ce06issm": {
+    MooringSites.CE06ISSM: {
         "refdes": "CE06ISSM-RID16-03-CTDBPC000",
         "method": "recovered_inst",
         "instrument": "ctdbp_cdef_instrument_recovered",
@@ -145,7 +194,7 @@ OOI_MOORINGS_CTD: dict[str, OOISiteInfo] = {
         "lon": 124.272,
         "depth": 29,
     },
-    "ce07shsm": {
+    MooringSites.CE07SHSM: {
         "refdes": "CE07SHSM-RID27-03-CTDBPC000",
         "method": "recovered_inst",
         "instrument": "ctdbp_cdef_instrument_recovered",
@@ -154,7 +203,7 @@ OOI_MOORINGS_CTD: dict[str, OOISiteInfo] = {
         "lon": 124.566,
         "depth": 87,
     },
-    "ce09ossm": {
+    MooringSites.CE09OSSM: {
         "refdes": "CE09OSSM-RID27-03-CTDBPC000",
         "method": "recovered_inst",
         "instrument": "ctdbp_cdef_instrument_recovered",
@@ -165,8 +214,8 @@ OOI_MOORINGS_CTD: dict[str, OOISiteInfo] = {
     },
 }
 
-OOI_PROFILERS_CTD: dict[str, OOISiteInfo] = {
-    "ce01issp": {
+OOI_PROFILERS_CTD: dict[ProfilerSites, _OOISiteInfo] = {
+    ProfilerSites.CE01ISSP: {
         "refdes": "CE01ISSP-SP001-09-CTDPFJ000",
         "method": "recovered_cspp",
         "instrument": "ctdpf_j_cspp_instrument_recovered",
@@ -175,7 +224,7 @@ OOI_PROFILERS_CTD: dict[str, OOISiteInfo] = {
         "lon": -124.096,
         "depth": 25,
     },
-    "ce02shsp": {
+    ProfilerSites.CE02SHSP: {
         "refdes": "CE02SHSP-SP001-08-CTDPFJ000",
         "method": "recovered_cspp",
         "instrument": "ctdpf_j_cspp_instrument_recovered",
@@ -184,7 +233,7 @@ OOI_PROFILERS_CTD: dict[str, OOISiteInfo] = {
         "lon": -124.299,
         "depth": 80,
     },
-    "ce04osps": {
+    ProfilerSites.CE04OSPS: {
         "refdes": "CE04OSPS-SF01B-2A-CTDPFA107",
         "method": "streamed",
         "instrument": "ctdpf_sbe43_sample",
@@ -193,7 +242,7 @@ OOI_PROFILERS_CTD: dict[str, OOISiteInfo] = {
         "lon": -124.953,
         "depth": 588,
     },
-    "ce04ospd": {
+    ProfilerSites.CE04OSPD: {
         "refdes": "CE04OSPD-DP01B-01-CTDPFL105",
         "method": "recovered_wfp",
         "instrument": "dpc_ctd_instrument_recovered",
@@ -202,7 +251,7 @@ OOI_PROFILERS_CTD: dict[str, OOISiteInfo] = {
         "lon": -124.953,
         "depth": 588,
     },
-    "rs01sbps": {
+    ProfilerSites.RS01SBPS: {
         "refdes": "RS01SBPS-SF01A-2A-CTDPFA102",
         "method": "streamed",
         "instrument": "ctdpf_sbe43_sample",
@@ -211,7 +260,7 @@ OOI_PROFILERS_CTD: dict[str, OOISiteInfo] = {
         "lon": -125.3893,
         "depth": 2906,
     },
-    "ce06issp": {
+    ProfilerSites.CE06ISSP: {
         "refdes": "CE06ISSP-SP001-09-CTDPFJ000",
         "method": "recovered_cspp",
         "instrument": "ctdpf_j_cspp_instrument_recovered",
@@ -220,7 +269,7 @@ OOI_PROFILERS_CTD: dict[str, OOISiteInfo] = {
         "lon": 124.269,
         "depth": 29,
     },
-    "ce07shsp": {
+    ProfilerSites.CE07SHSP: {
         "refdes": "CE07SHSP-SP001-08-CTDPFJ000",
         "method": "recovered_cspp",
         "instrument": "ctdpf_j_cspp_instrument_recovered",
@@ -229,7 +278,7 @@ OOI_PROFILERS_CTD: dict[str, OOISiteInfo] = {
         "lon": 124.565,
         "depth": 87,
     },
-    "ce09ospm": {
+    ProfilerSites.CE09OSPM: {
         "refdes": "CE09OSPM-WFP01-03-CTDPFK000",
         "method": "recovered_wfp",
         "instrument": "wfp-ctdpf_ckl_wfp_instrument_recovered",
@@ -240,8 +289,8 @@ OOI_PROFILERS_CTD: dict[str, OOISiteInfo] = {
     },
 }
 
-OOI_PROFILERS_CHL: dict[str, OOISiteInfo] = {
-    "ce01issp": {
+OOI_PROFILERS_CHL: dict[ProfilerSites, _OOISiteInfo] = {
+    ProfilerSites.CE01ISSP: {
         "refdes": "CE01ISSP-SP001-08-FLORTJ000",
         "method": "recovered_cspp",
         "instrument": "flort_sample",
@@ -250,7 +299,7 @@ OOI_PROFILERS_CHL: dict[str, OOISiteInfo] = {
         "lon": -124.096,
         "depth": 25,
     },
-    "ce02shsp": {
+    ProfilerSites.CE02SHSP: {
         "refdes": "CE02SHSP-SP001-07-FLORTJ000",
         "method": "recovered_cspp",
         "instrument": "flort_sample",
@@ -259,7 +308,7 @@ OOI_PROFILERS_CHL: dict[str, OOISiteInfo] = {
         "lon": -124.299,
         "depth": 80,
     },
-    "ce04osps": {
+    ProfilerSites.CE04OSPS: {
         "refdes": "CE04OSPS-SF01B-2A-FLORTD104",
         "method": "streamed",
         "instrument": "flort_d_data_record",
@@ -268,7 +317,7 @@ OOI_PROFILERS_CHL: dict[str, OOISiteInfo] = {
         "lon": -124.953,
         "depth": 588,
     },
-    "rs01sbps": {
+    ProfilerSites.RS01SBPS: {
         "refdes": "RS01SBPS-SF01A-3A-FLORTD101",
         "method": "streamed",
         "instrument": "flort_d_data_record",
@@ -277,7 +326,7 @@ OOI_PROFILERS_CHL: dict[str, OOISiteInfo] = {
         "lon": -125.3893,
         "depth": 2906,
     },
-    "ce06issp": {
+    ProfilerSites.CE06ISSP: {
         "refdes": "CE06ISSP-SP001-08-FLORTJ000",
         "method": "recovered_cspp",
         "instrument": "flort_sample",
@@ -286,7 +335,7 @@ OOI_PROFILERS_CHL: dict[str, OOISiteInfo] = {
         "lon": 124.269,
         "depth": 29,
     },
-    "ce07shsp": {
+    ProfilerSites.CE07SHSP: {
         "refdes": "CE07SHSP-SP001-08-FLORTJ000",
         "method": "recovered_cspp",
         "instrument": "flort_sample",
@@ -295,7 +344,7 @@ OOI_PROFILERS_CHL: dict[str, OOISiteInfo] = {
         "lon": 124.565,
         "depth": 87,
     },
-    "ce09ospm": {
+    ProfilerSites.CE09OSPM: {
         "refdes": "CE09OSPM-WFP01-03-FLORTK000",
         "method": "recovered_wfp",
         "instrument": "flort_sample",
@@ -307,30 +356,31 @@ OOI_PROFILERS_CHL: dict[str, OOISiteInfo] = {
 }
 
 
-class OOISite:
+class _OOISite:
     """A class representing an OOI site with its reference designator, method, instrument, and geographic coordinates."""
 
     def __init__(self, site: str, instrument: str, location_type: str) -> None:
         """Initialize an OOISite object with the given parameters.
 
         Args:
-            site (str): The site identifier. Must be one of the following: "CE01ISSP", "CE02SHSP", "CE04OSPS", "CE04OSPD", "CE06ISSP", "CE07SHSP", "CE09OSSP", "RS01SBPS". Required.
+            site (str): The site identifier. Must be one of the following: `CE01ISSP`, `CE02SHSP`, `CE04OSPS`, `CE04OSPD`, `CE06ISSP`, `CE07SHSP`, `CE09OSSP`, `RS01SBPS`. Required.
             instrument (str): The instrument identifier. Required.
             location_type (str): The type of location for the site. Required.
 
         """
-        self.site = site.lower()
-        self.instrument = instrument.lower()
-        self.location_type = location_type.lower()
-
-        if instrument == "ctd" and location_type == "profiler":
-            self.site_info = OOI_PROFILERS_CTD[self.site]
-        elif instrument == "chl" and location_type == "profiler":
-            self.site_info = OOI_PROFILERS_CHL[self.site]
-        elif instrument == "ctd" and location_type == "mooring":
-            self.site_info = OOI_MOORINGS_CTD[self.site]
+        self.site = site.upper()
+        self.instrument = instrument
+        self.location_type = location_type
 
         self.validate()
+
+        # we've already validated type of self.site to be in valid sites
+        if instrument == "ctd" and location_type == "profiler":
+            self.site_info = OOI_PROFILERS_CTD[self.site]  # ty:ignore[invalid-argument-type]
+        elif instrument == "chl" and location_type == "profiler":
+            self.site_info = OOI_PROFILERS_CHL[self.site]  # ty:ignore[invalid-argument-type]
+        elif instrument == "ctd" and location_type == "mooring":
+            self.site_info = OOI_MOORINGS_CTD[self.site]  # ty:ignore[invalid-argument-type]
 
         self.refdes = self.site_info["refdes"]
         self.method = self.site_info["method"]
@@ -344,7 +394,7 @@ class OOISite:
         """Validate that the site identifier is valid and that the latitude and longitude values are within acceptable bounds.
 
         Raises:
-            ValueError: If the site identifier is not one of the following: "CE01ISSP", "CE02SHSP", "CE04OSPS", "CE04OSPD", "CE06ISSP", "CE07SHSP", "CE09OSSP", "RS01SBPS".
+            ValueError: If the site identifier is not one of the following: `CE01ISSP`, `CE02SHSP`, `CE04OSPS`, `CE04OSPD`, `CE06ISSP`, `CE07SHSP`, `CE09OSSP`, `RS01SBPS`.
 
         """
         if self.location_type not in {"profiler", "mooring"}:
@@ -356,12 +406,29 @@ class OOISite:
         if self.location_type == "profiler" and self.instrument not in {"ctd", "chl"}:
             msg = f"Invalid instrument identifier: '{self.instrument}'. Must be either 'ctd' or 'chl'."
             raise ValueError(msg)
+        valid_sites = (
+            ", ".join(ProfilerSites.__members__)
+            if self.location_type == "profiler"
+            else ", ".join(MooringSites.__members__)
+        )
         if (
-            (self.location_type == "profiler" and self.instrument == "ctd" and self.site not in OOI_PROFILERS_CTD)
-            or (self.location_type == "profiler" and self.instrument == "chl" and self.site not in OOI_PROFILERS_CHL)
-            or (self.location_type == "mooring" and self.instrument == "ctd" and self.site not in OOI_MOORINGS_CTD)
+            (
+                self.location_type == "profiler"
+                and self.instrument == "ctd"
+                and self.site not in ProfilerSites.__members__
+            )
+            or (
+                self.location_type == "profiler"
+                and self.instrument == "chl"
+                and self.site not in ProfilerSites.__members__
+            )
+            or (
+                self.location_type == "mooring"
+                and self.instrument == "ctd"
+                and self.site not in MooringSites.__members__
+            )
         ):
-            msg = f"Invalid profiler identifier: '{self.site}' for instrument '{self.instrument}'. Must be one of the following (case insensitive): {', '.join(self.site_info.keys())}."
+            msg = f"Invalid profiler identifier: '{self.site}' for instrument '{self.instrument}'. Must be one of the following (case insensitive): {valid_sites}."
             raise ValueError(msg)
 
     def __repr__(self) -> str:
@@ -374,7 +441,7 @@ class OOISite:
         lon_str = f"{-self.lon:.0f}W" if self.lon < 0 else f"{self.lon:.0f}E"
         lat_str = f"{-self.lat:.0f}S" if self.lat < 0 else f"{self.lat:.0f}N"
         return (
-            f"OOISite(site='{self.site.upper()}', short_name='{self.short_name}', refdes='{self.refdes}', method='{self.method}', "
+            f"OOISite(site='{self.site}', short_name='{self.short_name}', refdes='{self.refdes}', method='{self.method}', "
             f"instrument='{self.instrument}', latitude={lat_str}, longitude={lon_str})"
         )
 
@@ -385,7 +452,7 @@ class OOISite:
             str: A string representation of the OOISite in the format 'OOI EA Site {site} {short_name}'.
 
         """
-        return f"OOI EA Site {self.site.upper()} {self.short_name}"
+        return f"OOI EA Site {self.site} {self.short_name}"
 
     @property
     def search_url(self) -> str:
@@ -396,7 +463,7 @@ class OOISite:
     @property
     def file_name(self) -> str:
         """Convert the profiler site and name to a string format suitable for filenames in the format '{site}_{short_name}'."""
-        return f"{self.site.upper()}_{self.short_name}"
+        return f"{self.site}_{self.short_name}"
 
 
 class _OOIBase(_Downloader):
@@ -404,7 +471,7 @@ class _OOIBase(_Downloader):
 
     def __init__(
         self,
-        location: str,
+        site: str | ProfilerSites | MooringSites,
         location_type: str,
         instrument: str,
         save_dir: str | None = None,
@@ -412,14 +479,15 @@ class _OOIBase(_Downloader):
         start_date: str | None = None,
         end_date: str | None = None,
     ) -> None:
-        self.location = OOISite(site=location, instrument=instrument, location_type=location_type)
+        site = site.value if isinstance(site, ProfilerSites | MooringSites) else site.upper()
+        self.location = _OOISite(site=site, instrument=instrument, location_type=location_type)
 
         self.search_url = self.location.search_url
         self.base_url = "https://thredds.dataexplorer.oceanobservatories.org/thredds/fileServer/"
         self.tag = self.location.refdes + r".*.nc$"  # setup regex for files we want
 
         super().__init__(
-            save_file_prefix=f"ooi_{location_type}_{location.lower()}_{instrument}",
+            save_file_prefix=f"ooi_{location_type}_{site}_{instrument}",
             save_dir=save_dir,
             save_file=save_file,
             start_date=start_date,
@@ -521,7 +589,7 @@ class _ProfilerBase(_OOIBase):
 
     def __init__(
         self,
-        location: str,
+        site: str | ProfilerSites,
         instrument: str,
         save_dir: str | None = None,
         save_file: str | None = None,
@@ -529,7 +597,7 @@ class _ProfilerBase(_OOIBase):
         end_date: str | None = None,
     ) -> None:
         super().__init__(
-            location=location,
+            site=site,
             location_type="profiler",
             instrument=instrument,
             save_dir=save_dir,
@@ -657,7 +725,7 @@ class ProfilerCTD(_ProfilerBase):
 
     def __init__(
         self,
-        site: str,
+        site: str | ProfilerSites,
         start_date: str | None = None,
         end_date: str | None = None,
         save_dir: str | None = None,
@@ -666,15 +734,15 @@ class ProfilerCTD(_ProfilerBase):
         """Initialize the EAProfilerDownloader with parameters for downloading.
 
         Args:
-            site (str): Site identifier for the dataset (e.g., "CE01ISSP"). Must be one of the following: "CE01ISSP", "CE02SHSP", "CE04OSPS", "CE04OSPD", "CE06ISSP", "CE07SHSP", "CE09OSPM", "RS01SBPS". Required.
-            start_date (str | None): The start date for the dataset in "YYYY-MM-DD" format. If None, defaults to "2000-01-01".
-            end_date (str | None): The end date for the dataset in "YYYY-MM-DD" format. If None, defaults to the current date.
-            save_dir (str | None): The directory to save the downloaded dataset. If None, defaults to a "data" directory in the current working directory.
-            save_file (str | None): The file name to save the downloaded dataset. If None, defaults to a name based on the dataset and date range.
+            site: Site identifier for the dataset. Required.
+            start_date: The start date for the dataset in "YYYY-MM-DD" format. If None, defaults to "2000-01-01".
+            end_date: The end date for the dataset in "YYYY-MM-DD" format. If None, defaults to the current date.
+            save_dir: The directory to save the downloaded dataset. If None, defaults to a "data" directory in the current working directory.
+            save_file: The file name to save the downloaded dataset. If None, defaults to a name based on the dataset and date range.
 
         """
         super().__init__(
-            location=site,
+            site=site,
             instrument="ctd",
             save_dir=save_dir,
             save_file=save_file,
@@ -687,7 +755,7 @@ class ProfilerCTD(_ProfilerBase):
         """Update the metadata of the OOI EA dataset to be CF-compliant and include necessary attributes.
 
         Args:
-            ds (xr.Dataset): The xarray Dataset containing the OOI EA data.
+            ds: The xarray Dataset containing the OOI EA data.
 
         Returns:
             xr.Dataset: The xarray Dataset with updated metadata.
@@ -796,7 +864,7 @@ class ProfilerCTD(_ProfilerBase):
         return ds
 
     @staticmethod
-    def threshold_mld(
+    def _threshold_mld(
         variable: xr.DataArray, threshold_type: Literal["temperature", "density"], threshold: float
     ) -> xr.DataArray:
         """Interpolate depth to a threshold value of the variable using linear interpolation between the two bounding depth levels.
@@ -928,16 +996,18 @@ class ProfilerCTD(_ProfilerBase):
         ds_binned = ds_binned.interpolate_na(
             dim="time", method="linear", use_coordinate=True, max_gap=np.timedelta64(1, "D")
         )
-        # calculate mixed layer depth using a density threshold of 0.03 kg/m^3
-        ds_binned["mixed_layer_depth_from_density"] = self.threshold_mld(
-            ds_binned["sea_water_density"], threshold_type="density", threshold=0.03
-        )
-        # calculate mixed layer depth using a temperature threshold of 0.2 degree C
-        ds_binned["mixed_layer_depth_from_temperature"] = self.threshold_mld(
-            ds_binned["sea_water_temperature"], threshold_type="temperature", threshold=0.2
-        )
-        # calculate stratification
-        ds_binned["n_squared"] = self._calculate_stratification(ds_binned)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            # calculate mixed layer depth using a density threshold of 0.03 kg/m^3
+            ds_binned["mixed_layer_depth_from_density"] = self._threshold_mld(
+                ds_binned["sea_water_density"], threshold_type="density", threshold=0.03
+            )
+            # calculate mixed layer depth using a temperature threshold of 0.2 degree C
+            ds_binned["mixed_layer_depth_from_temperature"] = self._threshold_mld(
+                ds_binned["sea_water_temperature"], threshold_type="temperature", threshold=0.2
+            )
+            # calculate stratification
+            ds_binned["n_squared"] = self._calculate_stratification(ds_binned)
         # now take daily mean
         ds_binned = ds_binned.resample(time="1D").mean()
 
@@ -959,7 +1029,7 @@ class ProfilerChlorophyll(_ProfilerBase):
 
     def __init__(
         self,
-        site: str,
+        site: str | ProfilerSites,
         start_date: str | None = None,
         end_date: str | None = None,
         save_dir: str | None = None,
@@ -968,15 +1038,15 @@ class ProfilerChlorophyll(_ProfilerBase):
         """Initialize the EAProfilerDownloader with parameters for downloading.
 
         Args:
-            site (str): Site identifier for the dataset (e.g., "CE01ISSP"). Must be one of the following: "CE01ISSP", "CE02SHSP", "CE04OSPS", "CE06ISSP", "CE07SHSP", "CE09OSPM", "RS01SBPS". Required.
-            start_date (str | None): The start date for the dataset in "YYYY-MM-DD" format. If None, defaults to "2000-01-01".
-            end_date (str | None): The end date for the dataset in "YYYY-MM-DD" format. If None, defaults to the current date.
-            save_dir (str | None): The directory to save the downloaded dataset. If None, defaults to a "data" directory in the current working directory.
-            save_file (str | None): The file name to save the downloaded dataset. If None, defaults to a name based on the dataset and date range.
+            site: Site identifier for the dataset. Must be one of the following: `CE01ISSP`, `CE02SHSP`, `CE04OSPS`, `CE06ISSP`, `CE07SHSP`, `CE09OSPM`, `RS01SBPS`. Required.
+            start_date: The start date for the dataset in "YYYY-MM-DD" format. If None, defaults to "2000-01-01".
+            end_date: The end date for the dataset in "YYYY-MM-DD" format. If None, defaults to the current date.
+            save_dir: The directory to save the downloaded dataset. If None, defaults to a "data" directory in the current working directory.
+            save_file: The file name to save the downloaded dataset. If None, defaults to a name based on the dataset and date range.
 
         """
         super().__init__(
-            location=site,
+            site=site,
             instrument="chl",
             save_dir=save_dir,
             save_file=save_file,
@@ -1105,14 +1175,14 @@ class _MooringBase(_OOIBase):
 
     def __init__(
         self,
-        location: str,
+        site: str | MooringSites,
         save_dir: str | None = None,
         save_file: str | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
     ) -> None:
         super().__init__(
-            location=location,
+            site=site,
             location_type="mooring",
             instrument="ctd",
             save_dir=save_dir,
@@ -1127,7 +1197,7 @@ class MooringCTD(_MooringBase):
 
     def __init__(
         self,
-        site: str,
+        site: str | MooringSites,
         start_date: str | None = None,
         end_date: str | None = None,
         save_dir: str | None = None,
@@ -1136,15 +1206,15 @@ class MooringCTD(_MooringBase):
         """Initialize the EAMooringDownloader with parameters for downloading.
 
         Args:
-            site (str): Site identifier for the dataset (e.g., "CE01ISSM"). Must be one of the following: "CE01ISSM", "CE02SHSM", "CE04OSSM", "CE06ISSM", "CE07SHSM", "CE09OSSM". Required.
-            start_date (str | None): The start date for the dataset in "YYYY-MM-DD" format. If None, defaults to "2000-01-01".
-            end_date (str | None): The end date for the dataset in "YYYY-MM-DD" format. If None, defaults to the current date.
-            save_dir (str | None): The directory to save the downloaded dataset. If None, defaults to a "data" directory in the current working directory.
-            save_file (str | None): The file name to save the downloaded dataset. If None, defaults to a name based on the dataset and date range.
+            site: Site identifier for the dataset (e.g., "CE01ISSM"). Must be one of the following: "CE01ISSM", "CE02SHSM", "CE04OSSM", "CE06ISSM", "CE07SHSM", "CE09OSSM". Required.
+            start_date: The start date for the dataset in "YYYY-MM-DD" format. If None, defaults to "2000-01-01".
+            end_date: The end date for the dataset in "YYYY-MM-DD" format. If None, defaults to the current date.
+            save_dir: The directory to save the downloaded dataset. If None, defaults to a "data" directory in the current working directory.
+            save_file: The file name to save the downloaded dataset. If None, defaults to a name based on the dataset and date range.
 
         """
         super().__init__(
-            location=site,
+            site=site,
             save_dir=save_dir,
             save_file=save_file,
             start_date=start_date,
@@ -1262,7 +1332,7 @@ class MooringCTD(_MooringBase):
 
         logger.info(f"Downloading files for {self.location}...")
         ds: list[xr.Dataset] = []
-        for f in enumerate(tqdm(download_urls, desc="Downloading datasets")):
+        for f in tqdm(download_urls, desc="Downloading datasets"):
             r = requests.get(f, timeout=(3.05, 120))
             if r.ok:
                 ds.append(xr.open_dataset(io.BytesIO(r.content)))

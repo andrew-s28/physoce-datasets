@@ -195,7 +195,7 @@ Do you have a publicly available dataset that you've got a great download script
 
 If you'd like to contribute to the code or documentation, please refer to the developer instructions below:
 
-1. Fork the repo on GitHub using the "Fork" button in the top right of the [repository home page](https://github.com/andrew-s28/physoce-datasets).
+1. [Create a fork of the repository](https://github.com/andrew-s28/physoce-datasets/fork).
 2. Clone your fork to your local machine:
 
     ```bash
@@ -206,7 +206,7 @@ If you'd like to contribute to the code or documentation, please refer to the de
 3. Setup the development environment by installing development and documentation dependencies and installing pre-commit hooks:
 
     ```bash
-    uv sync --group dev --group docs
+    uv sync --dev
     pre-commit install
     ```
 
@@ -225,10 +225,10 @@ If you'd like to contribute to the code or documentation, please refer to the de
     git push -u origin your-great-new-feature
     ```
 
-7. Open a pull request in the [upstream repository](https://github.com/andrew-s28/physoce-datasets/pulls).
+7. Open a [pull request in the upstream repository](https://github.com/andrew-s28/physoce-datasets/compare).
 
 Thanks so much for contributing to open source code!
 
 ### AI Contribution Policy
 
-The core developers have made use of modern large language model (LLM) auto-complete and other minor LLM assistance in the development of this project. LLMs can be great for documentation and boiler plate as well as configuration such as GitHub actions, but they are not substitues for a deep understanding of functional code that you are submitting in a pull request. For this reason, **all pull requests that utilize a significant amount of LLM assistance, defined in this case as going above and beyond basic auto-complete and documentation, must include a statement of what code was written exclusively or predominantly by AI**. PRs that do not adhere to this policy may be closed without review, under the sole judgement of project maintainers.
+We share the same [AI Usage Policy as xarray](https://docs.xarray.dev/en/stable/contribute/ai-policy.html). In short, this allows developers to use AI tools as a part of their development workflow, but requires that contributors understand all submitted code and take full responosiblity for their changes.

@@ -1,0 +1,21 @@
+# Read the Docs configuration file
+# See https://docs.readthedocs.io/en/stable/config-file/v2.html for details
+
+# Required
+version: 2
+
+# Set the OS, Python version, and other tools you might need
+build:
+  os: ubuntu-24.04
+  tools:
+    python: latest
+  jobs:
+    install:
+      - pip install zensical==0.0.46
+      - pip install mkdocstrings-python==2.0.5
+    build:
+      html:
+        - zensical build --strict
+    post_build:
+      - mkdir -p $READTHEDOCS_OUTPUT/html/
+      - cp --recursive site/* $READTHEDOCS_OUTPUT/html/

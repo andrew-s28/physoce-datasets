@@ -1,4 +1,4 @@
-"""Functions for downloading and processing ERA5 reanalysis data from the ECMWF Data Store."""
+"""Download and process [ERA5 single level data](https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels-timeseries?tab=overview) from the [Climate Data Store](https://cds.climate.copernicus.eu/)."""
 
 import contextlib
 import os
@@ -43,9 +43,6 @@ def login_to_ecmwf_datastore() -> Client:
 
     Overrides the default ECMWF Data Store login behavior to provide more user-friendly prompts and messages.
 
-    Args:
-        client (ecmwf.datastores.Client): An instance of the ECMWF Data Store client.
-
     Returns:
         ecmwf.datastores.Client: An authenticated instance of the ECMWF Data Store client.
 
@@ -79,14 +76,24 @@ class WindStress(_Downloader):
 
     def __init__(
         self,
-        latitude: float,
         longitude: float,
+        latitude: float,
         start_date: str | None = None,
         end_date: str | None = None,
         save_dir: str | None = None,
         save_file: str | None = None,
     ) -> None:
-        """Initialize the downloader and set up the ECMWF Data Store client and request state manager."""
+        """Initialize the downloader and set up the ECMWF Data Store client.
+
+        Args:
+            longitude (float): Longitude of the location for which to download data.
+            latitude (float): Latitude of the location for which to download data.
+            start_date (str | None): Start date for the data request in 'YYYY-MM-DD' format. If None, defaults to '2000-01-01'.
+            end_date (str | None): End date for the data request in 'YYYY-MM-DD' format. If None, defaults to the current date.
+            save_dir (str | None): Directory where the downloaded data will be saved. If None, defaults to a "data" directory in the current working directory.
+            save_file (str | None): Name of the file where the downloaded data will be saved. If None, defaults to a name based on the dataset and date range.
+
+        """
         self.location = LonLat(lon=longitude, lat=latitude)
         super().__init__(
             save_file_prefix="era5_reanalysis_wind_stress",
@@ -98,9 +105,9 @@ class WindStress(_Downloader):
 
         self.client = login_to_ecmwf_datastore()
 
-        self.request = self.setup_request()
+        self.request = self._setup_request()
 
-    def setup_request(self) -> dict:
+    def _setup_request(self) -> dict:
         """Set up the request parameters for the ECMWF Data Store API.
 
         Returns:

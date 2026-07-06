@@ -1,4 +1,4 @@
-"""Download NASA MUR SST datasets."""
+"""Download NASA datasets."""
 
 import datetime
 import getpass
