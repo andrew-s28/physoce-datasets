@@ -8,7 +8,7 @@ Do you have a publicly available dataset that you've got a great download script
 
 If you'd like to contribute to the code or documentation, please refer to the developer instructions below:
 
-1. Fork the repo on GitHub using the "Fork" button in the top right of the [repository home page](https://github.com/andrew-s28/physoce-datasets).
+1. [Create a fork of the repository](https://github.com/andrew-s28/physoce-datasets/fork).
 2. Clone your fork to your local machine:
 
     ```bash
@@ -19,11 +19,9 @@ If you'd like to contribute to the code or documentation, please refer to the de
 3. Setup the development environment by installing development and documentation dependencies and installing pre-commit hooks:
 
     ```bash
-    uv sync --group dev --group docs
+    uv sync --dev
     pre-commit install
     ```
-
-    If you're only updating code, you don't need the docs group. If you're only updating docs, you *do* need the dev group.
 
 4. Create a new branch with a helpful name:
 
@@ -38,7 +36,7 @@ If you'd like to contribute to the code or documentation, please refer to the de
     git push -u origin your-great-new-feature
     ```
 
-7. Open a pull request in the [upstream repository](https://github.com/andrew-s28/physoce-datasets/pulls).
+7. [Open a pull request in the upstream repository](https://github.com/andrew-s28/physoce-datasets/compare).
 
 Thanks so much for contributing to open source code!
 
