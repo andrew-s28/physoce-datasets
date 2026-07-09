@@ -19,7 +19,7 @@ from physoce_datasets.logging import logger
 from ._base import _Downloader
 from ._ooi_data import MooringSites, ProfilerSites, _OOISite
 
-__all__ = ["MooringCTD", "ProfilerCTD", "ProfilerChlorophyll"]
+__all__ = ["MooringCTD", "MooringSites", "ProfilerCTD", "ProfilerChlorophyll", "ProfilerSites"]
 
 # only drop fully failing flags as suspect flag 3 can be valid data
 QARTOD_DROP_FLAG = 4
