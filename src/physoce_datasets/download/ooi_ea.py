@@ -4,8 +4,7 @@ import io
 import re
 import warnings
 from datetime import UTC, datetime
-from enum import StrEnum
-from typing import Literal, TypedDict
+from typing import Literal
 
 import gsw
 import numpy as np
@@ -18,6 +17,7 @@ from tqdm import tqdm
 from physoce_datasets.logging import logger
 
 from ._base import _Downloader
+from ._ooi_data import MooringSites, ProfilerSites, _OOISite
 
 __all__ = ["MooringCTD", "ProfilerCTD", "ProfilerChlorophyll"]
 
@@ -95,375 +95,6 @@ VARIABLES_TO_DROP = [
     # unprocessed temperature from the pressure sensor, used by OOI to calculate output params but not necessary here
     "pressure_temp",
 ]
-
-
-class ProfilerSites(StrEnum):
-    """Representation for valid OOI profiler sites.
-
-    Valid options are:
-
-    - [`CE01ISSP`](https://oceanobservatories.org/site/ce01issp/)
-    - [`CE02SHSP`](https://oceanobservatories.org/site/ce02shsp/)
-    - [`CE04OSPS`](https://oceanobservatories.org/site/ce04osps/)
-    - [`CE04OSPD`](https://oceanobservatories.org/site/ce04ospd/)
-    - [`CE06ISSP`](https://oceanobservatories.org/site/ce06issp/)
-    - [`CE07SHSP`](https://oceanobservatories.org/site/ce07shsp/)
-    - [`CE09OSPM`](https://oceanobservatories.org/site/ce09ospm/)
-    - [`RS01SBPS`](https://oceanobservatories.org/site/rs01sbps/)
-
-    """
-
-    CE01ISSP = "CE01ISSP"
-    CE02SHSP = "CE02SHSP"
-    CE04OSPS = "CE04OSPS"
-    CE04OSPD = "CE04OSPD"
-    CE06ISSP = "CE06ISSP"
-    CE07SHSP = "CE07SHSP"
-    CE09OSPM = "CE09OSPM"
-    RS01SBPS = "RS01SBPS"
-
-
-class MooringSites(StrEnum):
-    """Representation for valid OOI mooring sites.
-
-    Valid options are:
-
-    - [`CE01ISSM`](https://oceanobservatories.org/site/ce01issm/)
-    - [`CE02SHSM`](https://oceanobservatories.org/site/ce02shsm/)
-    - [`CE04OSSM`](https://oceanobservatories.org/site/ce04ossm/)
-    - [`CE06ISSM`](https://oceanobservatories.org/site/ce06issm/)
-    - [`CE07SHSM`](https://oceanobservatories.org/site/ce07shsm/)
-    - [`CE09OSSM`](https://oceanobservatories.org/site/ce09ossm/)
-
-    """
-
-    CE01ISSM = "CE01ISSM"
-    CE02SHSM = "CE02SHSM"
-    CE04OSSM = "CE04OSSM"
-    CE06ISSM = "CE06ISSM"
-    CE07SHSM = "CE07SHSM"
-    CE09OSSM = "CE09OSSM"
-
-
-class _OOISiteInfo(TypedDict):
-    """A dictionary representing the information for an OOI site, including its reference designator, method, instrument, and geographic coordinates."""
-
-    refdes: str
-    method: str
-    instrument: str
-    short_name: str
-    lat: float
-    lon: float
-    depth: float
-
-
-OOI_MOORINGS_CTD: dict[MooringSites, _OOISiteInfo] = {
-    MooringSites.CE01ISSM: {
-        "refdes": "CE01ISSM-RID16-03-CTDBPC000",
-        "method": "recovered_inst",
-        "instrument": "ctdbp_cdef_instrument_recovered",
-        "short_name": "CTD",
-        "lat": 44.6598,
-        "lon": -124.095,
-        "depth": 25,
-    },
-    MooringSites.CE02SHSM: {
-        "refdes": "CE02SHSM-RID27-03-CTDBPC000",
-        "method": "recovered_inst",
-        "instrument": "ctdbp_cdef_instrument_recovered",
-        "short_name": "CTD",
-        "lat": 44.6393,
-        "lon": -124.304,
-        "depth": 80,
-    },
-    MooringSites.CE04OSSM: {
-        "refdes": "CE04OSSM-RID27-03-CTDBPC000",
-        "method": "recovered_inst",
-        "instrument": "ctdbp_cdef_instrument_recovered",
-        "short_name": "CTD",
-        "lat": 44.3811,
-        "lon": -124.956,
-        "depth": 588,
-    },
-    MooringSites.CE06ISSM: {
-        "refdes": "CE06ISSM-RID16-03-CTDBPC000",
-        "method": "recovered_inst",
-        "instrument": "ctdbp_cdef_instrument_recovered",
-        "short_name": "CTD",
-        "lat": 47.1336,
-        "lon": 124.272,
-        "depth": 29,
-    },
-    MooringSites.CE07SHSM: {
-        "refdes": "CE07SHSM-RID27-03-CTDBPC000",
-        "method": "recovered_inst",
-        "instrument": "ctdbp_cdef_instrument_recovered",
-        "short_name": "CTD",
-        "lat": 46.9859,
-        "lon": 124.566,
-        "depth": 87,
-    },
-    MooringSites.CE09OSSM: {
-        "refdes": "CE09OSSM-RID27-03-CTDBPC000",
-        "method": "recovered_inst",
-        "instrument": "ctdbp_cdef_instrument_recovered",
-        "short_name": "CTD",
-        "lat": 46.8517,
-        "lon": 124.982,
-        "depth": 544,
-    },
-}
-
-OOI_PROFILERS_CTD: dict[ProfilerSites, _OOISiteInfo] = {
-    ProfilerSites.CE01ISSP: {
-        "refdes": "CE01ISSP-SP001-09-CTDPFJ000",
-        "method": "recovered_cspp",
-        "instrument": "ctdpf_j_cspp_instrument_recovered",
-        "short_name": "CTD",
-        "lat": 44.662,
-        "lon": -124.096,
-        "depth": 25,
-    },
-    ProfilerSites.CE02SHSP: {
-        "refdes": "CE02SHSP-SP001-08-CTDPFJ000",
-        "method": "recovered_cspp",
-        "instrument": "ctdpf_j_cspp_instrument_recovered",
-        "short_name": "CTD",
-        "lat": 44.6372,
-        "lon": -124.299,
-        "depth": 80,
-    },
-    ProfilerSites.CE04OSPS: {
-        "refdes": "CE04OSPS-SF01B-2A-CTDPFA107",
-        "method": "streamed",
-        "instrument": "ctdpf_sbe43_sample",
-        "short_name": "CTD",
-        "lat": 44.3683,
-        "lon": -124.953,
-        "depth": 588,
-    },
-    ProfilerSites.CE04OSPD: {
-        "refdes": "CE04OSPD-DP01B-01-CTDPFL105",
-        "method": "recovered_wfp",
-        "instrument": "dpc_ctd_instrument_recovered",
-        "short_name": "CTD",
-        "lat": 44.3683,
-        "lon": -124.953,
-        "depth": 588,
-    },
-    ProfilerSites.RS01SBPS: {
-        "refdes": "RS01SBPS-SF01A-2A-CTDPFA102",
-        "method": "streamed",
-        "instrument": "ctdpf_sbe43_sample",
-        "short_name": "CTD",
-        "lat": 44.529,
-        "lon": -125.3893,
-        "depth": 2906,
-    },
-    ProfilerSites.CE06ISSP: {
-        "refdes": "CE06ISSP-SP001-09-CTDPFJ000",
-        "method": "recovered_cspp",
-        "instrument": "ctdpf_j_cspp_instrument_recovered",
-        "short_name": "CTD",
-        "lat": 47.136,
-        "lon": 124.269,
-        "depth": 29,
-    },
-    ProfilerSites.CE07SHSP: {
-        "refdes": "CE07SHSP-SP001-08-CTDPFJ000",
-        "method": "recovered_cspp",
-        "instrument": "ctdpf_j_cspp_instrument_recovered",
-        "short_name": "CTD",
-        "lat": 46.9843,
-        "lon": 124.565,
-        "depth": 87,
-    },
-    ProfilerSites.CE09OSPM: {
-        "refdes": "CE09OSPM-WFP01-03-CTDPFK000",
-        "method": "recovered_wfp",
-        "instrument": "wfp-ctdpf_ckl_wfp_instrument_recovered",
-        "short_name": "CTD",
-        "lat": 46.8517,
-        "lon": 124.982,
-        "depth": 544,
-    },
-}
-
-OOI_PROFILERS_CHL: dict[ProfilerSites, _OOISiteInfo] = {
-    ProfilerSites.CE01ISSP: {
-        "refdes": "CE01ISSP-SP001-08-FLORTJ000",
-        "method": "recovered_cspp",
-        "instrument": "flort_sample",
-        "short_name": "Fluorometer Chlorophyll",
-        "lat": 44.662,
-        "lon": -124.096,
-        "depth": 25,
-    },
-    ProfilerSites.CE02SHSP: {
-        "refdes": "CE02SHSP-SP001-07-FLORTJ000",
-        "method": "recovered_cspp",
-        "instrument": "flort_sample",
-        "short_name": "Fluorometer Chlorophyll",
-        "lat": 44.6372,
-        "lon": -124.299,
-        "depth": 80,
-    },
-    ProfilerSites.CE04OSPS: {
-        "refdes": "CE04OSPS-SF01B-2A-FLORTD104",
-        "method": "streamed",
-        "instrument": "flort_d_data_record",
-        "short_name": "Fluorometer Chlorophyll",
-        "lat": 44.3683,
-        "lon": -124.953,
-        "depth": 588,
-    },
-    ProfilerSites.RS01SBPS: {
-        "refdes": "RS01SBPS-SF01A-3A-FLORTD101",
-        "method": "streamed",
-        "instrument": "flort_d_data_record",
-        "short_name": "Fluorometer Chlorophyll",
-        "lat": 44.529,
-        "lon": -125.3893,
-        "depth": 2906,
-    },
-    ProfilerSites.CE06ISSP: {
-        "refdes": "CE06ISSP-SP001-08-FLORTJ000",
-        "method": "recovered_cspp",
-        "instrument": "flort_sample",
-        "short_name": "Fluorometer Chlorophyll",
-        "lat": 47.136,
-        "lon": 124.269,
-        "depth": 29,
-    },
-    ProfilerSites.CE07SHSP: {
-        "refdes": "CE07SHSP-SP001-08-FLORTJ000",
-        "method": "recovered_cspp",
-        "instrument": "flort_sample",
-        "short_name": "Fluorometer Chlorophyll",
-        "lat": 46.9843,
-        "lon": 124.565,
-        "depth": 87,
-    },
-    ProfilerSites.CE09OSPM: {
-        "refdes": "CE09OSPM-WFP01-03-FLORTK000",
-        "method": "recovered_wfp",
-        "instrument": "flort_sample",
-        "short_name": "Fluorometer Chlorophyll",
-        "lat": 46.8517,
-        "lon": 124.982,
-        "depth": 544,
-    },
-}
-
-
-class _OOISite:
-    """A class representing an OOI site with its reference designator, method, instrument, and geographic coordinates."""
-
-    def __init__(self, site: str, instrument: str, location_type: str) -> None:
-        """Initialize an OOISite object with the given parameters.
-
-        Args:
-            site (str): The site identifier. Must be one of the following: `CE01ISSP`, `CE02SHSP`, `CE04OSPS`, `CE04OSPD`, `CE06ISSP`, `CE07SHSP`, `CE09OSSP`, `RS01SBPS`. Required.
-            instrument (str): The instrument identifier. Required.
-            location_type (str): The type of location for the site. Required.
-
-        """
-        self.site = site.upper()
-        self.instrument = instrument
-        self.location_type = location_type
-
-        self.validate()
-
-        # we've already validated type of self.site to be in valid sites
-        if instrument == "ctd" and location_type == "profiler":
-            self.site_info = OOI_PROFILERS_CTD[self.site]  # ty:ignore[invalid-argument-type]
-        elif instrument == "chl" and location_type == "profiler":
-            self.site_info = OOI_PROFILERS_CHL[self.site]  # ty:ignore[invalid-argument-type]
-        elif instrument == "ctd" and location_type == "mooring":
-            self.site_info = OOI_MOORINGS_CTD[self.site]  # ty:ignore[invalid-argument-type]
-
-        self.refdes = self.site_info["refdes"]
-        self.method = self.site_info["method"]
-        self.instrument = self.site_info["instrument"]
-        self.lat = self.site_info["lat"]
-        self.lon = self.site_info["lon"]
-        self.depth = self.site_info["depth"]
-        self.short_name = self.site_info["short_name"]
-
-    def validate(self) -> None:
-        """Validate that the site identifier is valid and that the latitude and longitude values are within acceptable bounds.
-
-        Raises:
-            ValueError: If the site identifier is not one of the following: `CE01ISSP`, `CE02SHSP`, `CE04OSPS`, `CE04OSPD`, `CE06ISSP`, `CE07SHSP`, `CE09OSSP`, `RS01SBPS`.
-
-        """
-        if self.location_type not in {"profiler", "mooring"}:
-            msg = f"Invalid location type: '{self.location_type}'. Must be either 'profiler' or 'mooring'."
-            raise ValueError(msg)
-        if self.location_type == "mooring" and self.instrument != "ctd":
-            msg = f"Invalid instrument identifier: '{self.instrument}' for location type 'mooring'. Must be 'ctd'."
-            raise ValueError(msg)
-        if self.location_type == "profiler" and self.instrument not in {"ctd", "chl"}:
-            msg = f"Invalid instrument identifier: '{self.instrument}'. Must be either 'ctd' or 'chl'."
-            raise ValueError(msg)
-        valid_sites = (
-            ", ".join(ProfilerSites.__members__)
-            if self.location_type == "profiler"
-            else ", ".join(MooringSites.__members__)
-        )
-        if (
-            (
-                self.location_type == "profiler"
-                and self.instrument == "ctd"
-                and self.site not in ProfilerSites.__members__
-            )
-            or (
-                self.location_type == "profiler"
-                and self.instrument == "chl"
-                and self.site not in ProfilerSites.__members__
-            )
-            or (
-                self.location_type == "mooring"
-                and self.instrument == "ctd"
-                and self.site not in MooringSites.__members__
-            )
-        ):
-            msg = f"Invalid profiler identifier: '{self.site}' for instrument '{self.instrument}'. Must be one of the following (case insensitive): {valid_sites}."
-            raise ValueError(msg)
-
-    def __repr__(self) -> str:
-        """Represent the OOISite in code outputs (e.g., Python REPL).
-
-        Returns:
-            str: A string representation of the OOISite in the format 'OOISite(site=..., short_name=..., refdes=..., method=..., instrument=..., latitude=..., longitude=...)'.
-
-        """
-        lon_str = f"{-self.lon:.0f}W" if self.lon < 0 else f"{self.lon:.0f}E"
-        lat_str = f"{-self.lat:.0f}S" if self.lat < 0 else f"{self.lat:.0f}N"
-        return (
-            f"OOISite(site='{self.site}', short_name='{self.short_name}', refdes='{self.refdes}', method='{self.method}', "
-            f"instrument='{self.instrument}', latitude={lat_str}, longitude={lon_str})"
-        )
-
-    def __str__(self) -> str:
-        """Convert the OOISite to a formatted string. Accessed with str(ooisite).
-
-        Returns:
-            str: A string representation of the OOISite in the format 'OOI EA Site {site} {short_name}'.
-
-        """
-        return f"OOI EA Site {self.site} {self.short_name}"
-
-    @property
-    def search_url(self) -> str:
-        """Construct the search URL for the OOI site based on its reference designator, method, and instrument."""
-        search_url_base = "https://thredds.dataexplorer.oceanobservatories.org/thredds/catalog/ooigoldcopy/public/"
-        return search_url_base + f"{self.refdes}-{self.method}-{self.instrument}" + "/catalog.html"
-
-    @property
-    def file_name(self) -> str:
-        """Convert the profiler site and name to a string format suitable for filenames in the format '{site}_{short_name}'."""
-        return f"{self.site}_{self.short_name}"
 
 
 class _OOIBase(_Downloader):
@@ -638,8 +269,7 @@ class _ProfilerBase(_OOIBase):
         profiles.append(profile)
         return profiles
 
-    @staticmethod
-    def _bin_profiles(ds: xr.Dataset, z_lab: str = "depth", t_lab: str = "time") -> xr.DataArray | xr.Dataset | None:
+    def _bin_dataset(self, ds: xr.Dataset, z_lab: str = "depth", t_lab: str = "time") -> xr.Dataset:
         """Bins a profiler time series into depth bins.
 
         Args:
@@ -655,16 +285,16 @@ class _ProfilerBase(_OOIBase):
         # setup 1 meter depth bins
         step = 1
         # find minimum and maximum depth bins over all data
-        depth_min = (
-            np.floor(np.min(ds["depth"].values)) - step / 2
-        )  # want centers to be integer depths, so need to start edges at step / 2 before min depth
-        depth_max = np.ceil(np.max(ds["depth"].values)) + step / 2  # same as above
-        # depth_bins is edges of bins
-        if np.isnan(depth_min) or np.isnan(depth_max):
-            return None
+        depth_min = -step / 2  # want centers to be integer depths, so need to start edges at step / 2 before 0
+        depth_max = self.location.depth + step / 2
         depth_bins = np.arange(
             depth_min, depth_max + step, step
         )  # need to go past by step for stop due to exclusive end range
+
+        time_min = ds[t_lab].min().values.astype("datetime64[D]")
+        # add one day to include the last day in the range
+        time_max = ds[t_lab].max().values.astype("datetime64[D]") + np.timedelta64(1, "D")
+        time_bins = xr.date_range(start=time_min, end=time_max, freq="1D")
 
         # one last catch for datetime or string types which will break the binning, though these should be removed in processing
         types = [ds[i].dtype for i in ds]
@@ -682,42 +312,28 @@ class _ProfilerBase(_OOIBase):
                 ds,
                 ds[t_lab],
                 ds[z_lab],
-                func="nanmean",
-                expected_groups=(None, depth_bins),
-                isbin=[False, True],
+                func="mean",
+                expected_groups=(time_bins, depth_bins),
+                isbin=[True, True],
                 method="map-reduce",
                 skipna=True,
             )
 
         # manually re-assign coordinates to remove _bin coordinates and replace them with bin centers
-        depth = np.array([x.mid for x in ds.depth_bins.values])
-        ds[z_lab] = ([z_lab + "_bins"], depth)
-        ds = ds.swap_dims({z_lab + "_bins": z_lab})
-        ds = ds.drop_vars([z_lab + "_bins"])
-        time_mean = ds[t_lab].mean().values
-        ds = ds.mean(dim=t_lab)  # average over time dimension to get one profile per deployment
-        ds = ds.expand_dims({t_lab: [time_mean]})  # add time dimension back in with mean time for the profile
+        ds[z_lab] = xr.DataArray(
+            [interval.mid for interval in ds.depth_bins.values],
+            dims=[z_lab + "_bins"],
+            attrs={"long_name": "Depth", "standard_name": "depth", "units": "m"},
+        )
+        ds[t_lab] = xr.DataArray(
+            [interval.left for interval in ds.time_bins.values],
+            dims=[t_lab + "_bins"],
+            attrs={"long_name": "Time", "standard_name": "time"},
+        )
+        ds = ds.swap_dims({z_lab + "_bins": z_lab, t_lab + "_bins": t_lab})
+        ds = ds.drop_vars([z_lab + "_bins", t_lab + "_bins"], errors="ignore")
 
         return ds
-
-    @staticmethod
-    def _bin_dataset(ds: xr.Dataset, z_lab: str = "depth", t_lab: str = "time") -> xr.Dataset:
-        """Split a dataset into profiles, bin them, and recombine.
-
-        Args:
-            ds (xr.Dataset): The xarray Dataset containing the profiler data.
-            z_lab (str, optional): The name of the depth variable in the dataset. Defaults to "depth".
-            t_lab (str, optional): The name of the time variable in the dataset. Defaults to "time".
-
-        Returns:
-            xr.Dataset: The binned xarray Dataset.
-
-        """
-        profiles = _ProfilerBase._split_profiles(ds)
-        binned_profiles = [_ProfilerBase._bin_profiles(p, z_lab=z_lab, t_lab=t_lab) for p in profiles]
-        binned_profiles = [p for p in binned_profiles if p is not None]
-        ds_binned = xr.concat(binned_profiles, dim="time", join="outer")
-        return ds_binned
 
 
 class ProfilerCTD(_ProfilerBase):
@@ -864,8 +480,44 @@ class ProfilerCTD(_ProfilerBase):
         return ds
 
     @staticmethod
+    def _interpolate_along_axis(
+        variable: xr.DataArray, target: xr.DataArray, lo: xr.DataArray, hi: xr.DataArray
+    ) -> xr.DataArray:
+        """Interpolate depth to a target value of the variable using linear interpolation between two bounding depth indices.
+
+        Args:
+            variable (xr.DataArray): 2D array of variable values with dimensions (time, depth)
+            target (xr.DataArray): 1D array of target values for each time step
+            lo (xr.DataArray): 1D array of lower bounding depth indices for each time step
+            hi (xr.DataArray): 1D array of upper bounding depth indices for each time step
+
+        Returns:
+            1D array of interpolated depth values at the threshold for each time step
+
+        """
+        # Get values at bounding indices
+        d0 = variable["depth"].values[lo.values]
+        d1 = variable["depth"].values[hi.values]
+        v0 = variable.values[np.arange(variable.values.shape[0]), lo.values]
+        v1 = variable.values[np.arange(variable.values.shape[0]), hi.values]
+
+        # check if target_values is within the bounds of v0 and v1 for each profile
+        threshold_in_bounds = (np.min(np.stack([v0, v1], axis=0), axis=0) < target.values) & (
+            target.values < np.max(np.stack([v0, v1], axis=0), axis=0)
+        )
+
+        # Slope is rise over run
+        slope = (d1 - d0) / (v1 - v0)
+        out = d0 + slope * (target.values - v0)
+
+        out = xr.DataArray(out, coords={"time": variable.coords["time"]}, dims=["time"])
+
+        out = out.where(threshold_in_bounds, np.nan)  # set to nan if threshold is out of bounds
+
+        return out
+
     def _threshold_mld(
-        variable: xr.DataArray, threshold_type: Literal["temperature", "density"], threshold: float
+        self, variable: xr.DataArray, threshold_type: Literal["temperature", "density"], threshold: float
     ) -> xr.DataArray:
         """Interpolate depth to a threshold value of the variable using linear interpolation between the two bounding depth levels.
 
@@ -875,72 +527,41 @@ class ProfilerCTD(_ProfilerBase):
             threshold (float): difference from surface value to define threshold for MLD calculation, always positive
 
         Returns:
-            xr.DataArray: 1D array of interpolated depth values at the threshold for each time step
+            1D array of interpolated depth values at the threshold for each time step
 
         """
         # need to treat temp and density differently since temp decreases with depth and density increases with depth
         # ensure threshold is positive and flip sign for density since it increases with depth
         threshold = abs(threshold)
         threshold = threshold if threshold_type == "density" else -threshold
-        # find threshold value using the top 5 meters of the profile as the surface value
-        threshold_target = variable.isel(depth=slice(0, 5)).mean(dim="depth") + threshold
+        # find threshold value using the top 2 to 7 meters of the profile as the surface value
+        # this removes sometimes problematic surface spikes in the data that can throw off the MLD calculation
+        threshold_target = variable.sel(depth=10, method="bfill") + threshold
 
         # find indices of bounding depth levels for interpolation
         if threshold_type == "temperature":
             # index of first greater than target, since argmax finds first True
-            hi = np.argmax(variable.values[:, 5:] <= threshold_target.values[:, None], axis=1) + 5
-            all_false = ~np.any(
-                variable.values[:, 5:] >= threshold_target.values[:, None], axis=-1
-            )  # find profiles with all values less than target
+            hi = (variable <= threshold_target).argmax("depth")
+            all_false = (variable.sel(depth=slice(10, None)) > threshold_target).all(
+                "depth"
+            )  # find profiles with all values greater than target
         elif threshold_type == "density":
             # index of first less than target, since argmax finds first True
-            hi = np.argmax(variable.values[:, 5:] >= threshold_target.values[:, None], axis=1) + 5
-            all_false = ~np.any(
-                variable.values[:, 5:] >= threshold_target.values[:, None], axis=-1
+            hi = (variable >= threshold_target).argmax("depth")
+            all_false = (variable.sel(depth=slice(10, None)) < threshold_target).all(
+                "depth"
             )  # find profiles with all values less than target
 
-        hi = np.clip(hi, 1, variable["depth"].size - 1)  # ensure hi is at least 1 and at most the last index
+        hi = hi.clip(min=1, max=variable["depth"].size - 1)  # ensure hi is at least 1 and at most the last index
         # hi is high in the index sense, not the real depth space sense, so low index is hi - 1
         lo = hi - 1
 
-        # Get values at bounding indices
-        d0 = variable["depth"].values[lo]
-        d1 = variable["depth"].values[hi]
-        v0 = variable.values[np.arange(variable.values.shape[0]), lo]
-        v1 = variable.values[np.arange(variable.values.shape[0]), hi]
+        out = self._interpolate_along_axis(variable, threshold_target, lo, hi)
 
-        # check if threshold_target_values is within the bounds of v0 and v1 for each profile
-        threshold_in_bounds = (np.min(np.stack([v0, v1], axis=0), axis=0) < threshold_target.values) & (
-            threshold_target.values < np.max(np.stack([v0, v1], axis=0), axis=0)
-        )
+        # for profiles where all values are greater than (temp) or less than (density) the threshold, set MLD to last valid depth value (deepest depth)
+        out = out.where(~all_false, variable["depth"].max(dim="depth"))
 
-        # Slope is rise over run
-        slope = (d1 - d0) / (v1 - v0)
-        out = d0 + slope * (threshold_target.values - v0)
-
-        out = np.where(threshold_in_bounds, out, d0)  # if threshold_target is not within bounds, set to d0 (5 m depth)
-
-        # silence RuntimeWarnings as we expect some all NaN slices when calculating MLD for profiles that don't meet the threshold condition
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", category=RuntimeWarning)
-            # for profiles where all values are greater than (temp) or less than (density) the threshold, set MLD to last valid depth value (deepest depth)
-            # first broadcast depth to the same shape as variable_values for easier indexing
-            depth_broadcasted = np.broadcast_to(variable["depth"].values, variable.values.shape)
-            depth_broadcasted = np.where(
-                all_false[:, None], depth_broadcasted, np.nan
-            )  # set depth to nan for profiles that don't meet the threshold condition
-            depth_broadcasted = np.where(
-                np.isnan(variable.values), np.nan, depth_broadcasted
-            )  # set depth to nan for profiles that have nan values
-            last_valid_depth = np.nanmax(depth_broadcasted, axis=-1)  # find last valid depth for each profile
-            out = np.where(all_false, last_valid_depth, out)  # set MLD
-
-        out = xr.DataArray(out, coords={"time": variable.coords["time"]}, dims=["time"])
-
-        # mask out profiles that have all nans in the upper 5 meters since we can't calculate a threshold for those
-        all_surface_nans = variable.isel(depth=slice(0, 5)).isnull().all(dim="depth")
-
-        return out[~all_surface_nans]
+        return out
 
     def _calculate_stratification(self, ds: xr.Dataset) -> xr.Dataset:
         """Calculate the Brunt-Vaisala frequency (n_squared) from density profiles in the dataset.
@@ -974,53 +595,51 @@ class ProfilerCTD(_ProfilerBase):
             if r.ok:
                 ds.append(xr.open_dataset(io.BytesIO(r.content)))
                 ds[-1] = ds[-1].swap_dims({"obs": "time"}).squeeze()
-                ds[-1] = ds[-1].where(ds[-1]["depth"] <= self.location.depth, drop=True)
+                ds[-1] = self._qc_check(
+                    ds[-1], variables=["sea_water_pressure", "sea_water_temperature", "sea_water_practical_salinity"]
+                )
+                ds[-1] = self._drop_unused_vars(ds[-1])
+                ds[-1] = self._calculate_density(ds[-1])
+                ds[-1] = self._bin_dataset(ds[-1]).compute()
 
-        ds = [self._calculate_density(di) for di in ds]
-        ds_concat = xr.concat(ds, dim="time")
+        ds_concat = xr.concat(ds, dim="time", join="outer")
         ds_concat = ds_concat.sortby("time")  # ensure data is sorted by time after merging
+        ds_concat = ds_concat.resample(
+            time="1D"
+        ).mean()  # take daily mean after merging for deployments that overlap in end time date
         ds_concat = ds_concat.sel(
             time=slice(self.start_date, self.end_date)
         )  # subset to specified date range after merging
 
-        ds_concat = self._qc_check(
-            ds_concat, variables=["sea_water_pressure", "sea_water_temperature", "sea_water_practical_salinity"]
-        )
-        ds_concat = self._drop_unused_vars(ds_concat)
-
-        ds_binned = self._bin_dataset(ds_concat)
-
         # interpolate up to 5 meters
-        ds_binned = ds_binned.interpolate_na(dim="depth", method="linear", use_coordinate=True, max_gap=5)
+        ds_concat = ds_concat.interpolate_na(dim="depth", method="linear", use_coordinate=True, max_gap=5)
         # interpolate up to 1 day
-        ds_binned = ds_binned.interpolate_na(
+        ds_concat = ds_concat.interpolate_na(
             dim="time", method="linear", use_coordinate=True, max_gap=np.timedelta64(1, "D")
         )
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
             # calculate mixed layer depth using a density threshold of 0.03 kg/m^3
-            ds_binned["mixed_layer_depth_from_density"] = self._threshold_mld(
-                ds_binned["sea_water_density"], threshold_type="density", threshold=0.03
+            ds_concat["mixed_layer_depth_from_density"] = self._threshold_mld(
+                ds_concat["sea_water_density"], threshold_type="density", threshold=0.03
             )
             # calculate mixed layer depth using a temperature threshold of 0.2 degree C
-            ds_binned["mixed_layer_depth_from_temperature"] = self._threshold_mld(
-                ds_binned["sea_water_temperature"], threshold_type="temperature", threshold=0.2
+            ds_concat["mixed_layer_depth_from_temperature"] = self._threshold_mld(
+                ds_concat["sea_water_temperature"], threshold_type="temperature", threshold=0.2
             )
             # calculate stratification
-            ds_binned["n_squared"] = self._calculate_stratification(ds_binned)
-        # now take daily mean
-        ds_binned = ds_binned.resample(time="1D").mean()
+            ds_concat["n_squared"] = self._calculate_stratification(ds_concat)
 
-        ds_binned = ds_binned.assign_coords(
+        ds_concat = ds_concat.assign_coords(
             {
                 "latitude": self.location.lat,
                 "longitude": self.location.lon,
                 "site": self.location.site,
             }
         )
-        ds_binned = self._update_metadata(ds_binned)
+        ds_concat = self._update_metadata(ds_concat)
 
-        ds_binned.to_netcdf(self.save_file_path)
+        ds_concat.to_netcdf(self.save_file_path)
         logger.info(f"Download complete! Dataset saved to {self.save_file_path}")
 
 
@@ -1132,9 +751,10 @@ class ProfilerChlorophyll(_ProfilerBase):
                 ds.append(xr.open_dataset(io.BytesIO(r.content)))
                 ds[-1] = ds[-1].swap_dims({"obs": "time"}).squeeze()
                 ds[-1] = ds[-1].reset_coords(["lat", "lon", "depth"])
-                ds[-1] = ds[-1].where(ds[-1]["depth"] < self.location.depth, drop=True)
+                ds[-1] = ds[-1].where(ds[-1]["depth"] <= self.location.depth, drop=True)
+                ds[-1] = self._bin_dataset(ds[-1]).compute()
 
-        ds_concat = xr.concat(ds, dim="time")
+        ds_concat = xr.concat(ds, dim="time", join="outer")
         ds_concat = ds_concat.sortby("time")  # ensure data is sorted by time after merging
         ds_concat = ds_concat.sel(
             time=slice(self.start_date, self.end_date)
@@ -1146,27 +766,25 @@ class ProfilerChlorophyll(_ProfilerBase):
         )
         ds_concat = self._drop_unused_vars(ds_concat)
 
-        ds_binned = self._bin_dataset(ds_concat)
-
         # interpolate up to 5 meters
-        ds_binned = ds_binned.interpolate_na(dim="depth", method="linear", use_coordinate=True, max_gap=5)
+        ds_concat = ds_concat.interpolate_na(dim="depth", method="linear", use_coordinate=True, max_gap=5)
         # interpolate up to 1 day
-        ds_binned = ds_binned.interpolate_na(
+        ds_concat = ds_concat.interpolate_na(
             dim="time", method="linear", use_coordinate=True, max_gap=np.timedelta64(1, "D")
         )
 
-        ds_binned = ds_binned.resample(time="1D").mean()
+        ds_concat = ds_concat.resample(time="1D").mean()
 
-        ds_binned = ds_binned.assign_coords(
+        ds_concat = ds_concat.assign_coords(
             {
                 "latitude": self.location.lat,
                 "longitude": self.location.lon,
                 "site": self.location.site,
             }
         )
-        ds_binned = self._update_metadata(ds_binned)
+        ds_concat = self._update_metadata(ds_concat)
 
-        ds_binned.to_netcdf(self.save_file_path)
+        ds_concat.to_netcdf(self.save_file_path)
         logger.info(f"Download complete! Dataset saved to {self.save_file_path}")
 
 
@@ -1339,7 +957,7 @@ class MooringCTD(_MooringBase):
                 ds[-1] = ds[-1].swap_dims({"obs": "time"}).squeeze()
 
         ds = [self._process(di) for di in ds]
-        ds_concat = xr.concat(ds, dim="time")
+        ds_concat = xr.concat(ds, dim="time", join="outer")
         ds_concat = ds_concat.sortby("time")  # ensure data is sorted by time after merging
         ds_concat = ds_concat.sel(
             time=slice(self.start_date, self.end_date)
