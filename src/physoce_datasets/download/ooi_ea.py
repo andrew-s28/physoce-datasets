@@ -214,6 +214,28 @@ class _OOIBase(_Downloader):
         ds = ds.drop_vars(VARIABLES_TO_DROP, errors="ignore")
         return ds
 
+    def _calculate_density(self, ds: xr.Dataset) -> xr.Dataset:
+        """Calculate density from salinity and temperature for an OOI EA dataset.
+
+        Args:
+            ds (xr.Dataset): The raw xarray Dataset containing the OOI EA data.
+
+        Returns:
+            xr.Dataset: The processed xarray Dataset with calculated density and added metadata.
+
+        """
+        ds["sea_water_absolute_salinity"] = gsw.SA_from_SP(
+            ds["sea_water_practical_salinity"], ds["sea_water_pressure"], self.location.lon, self.location.lat
+        )
+        ds["sea_water_conservative_temperature"] = gsw.CT_from_t(
+            ds["sea_water_absolute_salinity"], ds["sea_water_temperature"], ds["sea_water_pressure"]
+        )
+        ds["sea_water_density"] = gsw.rho(
+            ds["sea_water_absolute_salinity"], ds["sea_water_conservative_temperature"], ds["sea_water_pressure"]
+        )
+
+        return ds
+
 
 class _ProfilerBase(_OOIBase):
     """Base class for downloading OOI Endurance Array Profiler datasets, containing shared methods and attributes for profiler datasets."""
@@ -457,28 +479,6 @@ class ProfilerCTD(_ProfilerBase):
         )
         return ds
 
-    def _calculate_density(self, ds: xr.Dataset) -> xr.Dataset:
-        """Calculate density from salinity and temperature for an OOI EA dataset.
-
-        Args:
-            ds (xr.Dataset): The raw xarray Dataset containing the OOI EA data.
-
-        Returns:
-            xr.Dataset: The processed xarray Dataset with calculated density and added metadata.
-
-        """
-        ds["sea_water_absolute_salinity"] = gsw.SA_from_SP(
-            ds["sea_water_practical_salinity"], ds["sea_water_pressure"], self.location.lon, self.location.lat
-        )
-        ds["sea_water_conservative_temperature"] = gsw.CT_from_t(
-            ds["sea_water_absolute_salinity"], ds["sea_water_temperature"], ds["sea_water_pressure"]
-        )
-        ds["sea_water_density"] = gsw.rho(
-            ds["sea_water_absolute_salinity"], ds["sea_water_conservative_temperature"], ds["sea_water_pressure"]
-        )
-
-        return ds
-
     @staticmethod
     def _interpolate_along_axis(
         variable: xr.DataArray, target: xr.DataArray, lo: xr.DataArray, hi: xr.DataArray
@@ -712,28 +712,6 @@ class ProfilerChlorophyll(_ProfilerBase):
         )
         return ds
 
-    def _calculate_density(self, ds: xr.Dataset) -> xr.Dataset:
-        """Calculate density from salinity and temperature for an OOI EA dataset.
-
-        Args:
-            ds (xr.Dataset): The raw xarray Dataset containing the OOI EA data.
-
-        Returns:
-            xr.Dataset: The processed xarray Dataset with calculated density and added metadata.
-
-        """
-        ds["sea_water_absolute_salinity"] = gsw.SA_from_SP(
-            ds["sea_water_practical_salinity"], ds["sea_water_pressure"], self.location.lon, self.location.lat
-        )
-        ds["sea_water_conservative_temperature"] = gsw.CT_from_t(
-            ds["sea_water_absolute_salinity"], ds["sea_water_temperature"], ds["sea_water_pressure"]
-        )
-        ds["sea_water_density"] = gsw.rho(
-            ds["sea_water_absolute_salinity"], ds["sea_water_conservative_temperature"], ds["sea_water_pressure"]
-        )
-
-        return ds
-
     def download(self) -> None:
         """Download the netCDF data files from the THREDDS catalog and save them to a local directory."""
         logger.info(f"Getting list of data files for {self.location}...")
@@ -906,39 +884,6 @@ class MooringCTD(_MooringBase):
         )
         return ds
 
-    def _process(self, ds: xr.Dataset) -> xr.Dataset:
-        """Process the raw OOI EA dataset by calculating density and adding metadata.
-
-        Args:
-            ds (xr.Dataset): The raw xarray Dataset containing the OOI EA data.
-
-        Returns:
-            xr.Dataset: The processed xarray Dataset with calculated density and added metadata.
-
-        """
-        ds = self._qc_check(
-            ds, variables=["sea_water_pressure", "sea_water_temperature", "sea_water_practical_salinity"]
-        )
-        ds = self._drop_unused_vars(ds)
-
-        # interpolate over gaps of up to one day
-        ds = ds.interpolate_na("time", method="linear", use_coordinate=True, max_gap=np.timedelta64(1, "D"))
-
-        ds["sea_water_absolute_salinity"] = gsw.SA_from_SP(
-            ds["sea_water_practical_salinity"], ds["sea_water_pressure"], self.location.lon, self.location.lat
-        )
-        ds["sea_water_conservative_temperature"] = gsw.CT_from_t(
-            ds["sea_water_temperature"], ds["sea_water_pressure"], ds["sea_water_absolute_salinity"]
-        )
-        ds["sea_water_density"] = gsw.rho(
-            ds["sea_water_absolute_salinity"], ds["sea_water_conservative_temperature"], ds["sea_water_pressure"]
-        )
-
-        # take daily mean
-        ds = ds.resample(time="1D").mean()
-
-        return ds
-
     def download(self) -> None:
         """Download the netCDF data files from the THREDDS catalog and save them to a local directory."""
         logger.info(f"Getting list of data files for {self.location}...")
@@ -956,12 +901,26 @@ class MooringCTD(_MooringBase):
                 ds.append(xr.open_dataset(io.BytesIO(r.content)))
                 ds[-1] = ds[-1].swap_dims({"obs": "time"}).squeeze()
 
-        ds = [self._process(di) for di in ds]
         ds_concat = xr.concat(ds, dim="time", join="outer")
-        ds_concat = ds_concat.sortby("time")  # ensure data is sorted by time after merging
+        ds_concat = ds_concat.sortby("time")
+        ds_concat = self._qc_check(
+            ds_concat, variables=["sea_water_pressure", "sea_water_temperature", "sea_water_practical_salinity"]
+        )
+        ds_concat = self._drop_unused_vars(ds_concat)
+
+        ds_concat = self._calculate_density(ds_concat)
+
+        # take daily mean
+        ds_concat = ds_concat.resample(time="1D").mean()
+        # interpolate over gaps of up to one day
+        ds_concat = ds_concat.interpolate_na(
+            "time", method="linear", use_coordinate=True, max_gap=np.timedelta64(1, "D")
+        )
+
         ds_concat = ds_concat.sel(
             time=slice(self.start_date, self.end_date)
         )  # subset to specified date range after merging
+
         ds_concat = ds_concat.assign_coords(
             {
                 "latitude": self.location.lat,
