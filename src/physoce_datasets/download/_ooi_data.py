@@ -198,7 +198,7 @@ OOI_MOORINGS_CTD: dict[MooringSites, _OOISiteInfo] = {
         "short_name": "CTD",
         "lat": 44.3811,
         "lon": -124.956,
-        "depth": 588,
+        "depth": 200,
     },
     MooringSites.CE06ISSM: {
         "refdes": "CE06ISSM-RID16-03-CTDBPC000",
@@ -225,7 +225,7 @@ OOI_MOORINGS_CTD: dict[MooringSites, _OOISiteInfo] = {
         "short_name": "CTD",
         "lat": 46.8517,
         "lon": 124.982,
-        "depth": 544,
+        "depth": 200,
     },
 }
 
@@ -255,7 +255,7 @@ OOI_PROFILERS_CTD: dict[ProfilerSites, _OOISiteInfo] = {
         "short_name": "CTD",
         "lat": 44.3683,
         "lon": -124.953,
-        "depth": 588,
+        "depth": 200,
     },
     ProfilerSites.RS01SBPS: {
         "refdes": "RS01SBPS-SF01A-2A-CTDPFA102",
@@ -264,7 +264,7 @@ OOI_PROFILERS_CTD: dict[ProfilerSites, _OOISiteInfo] = {
         "short_name": "CTD",
         "lat": 44.529,
         "lon": -125.3893,
-        "depth": 2906,
+        "depth": 200,
     },
     ProfilerSites.CE06ISSP: {
         "refdes": "CE06ISSP-SP001-09-CTDPFJ000",
@@ -291,7 +291,7 @@ OOI_PROFILERS_CTD: dict[ProfilerSites, _OOISiteInfo] = {
         "short_name": "CTD",
         "lat": 46.8517,
         "lon": 124.982,
-        "depth": 544,
+        "depth": 200,
     },
 }
 
@@ -321,7 +321,7 @@ OOI_PROFILERS_CHL: dict[ProfilerSites, _OOISiteInfo] = {
         "short_name": "Fluorometer Chlorophyll",
         "lat": 44.3683,
         "lon": -124.953,
-        "depth": 588,
+        "depth": 200,
     },
     ProfilerSites.RS01SBPS: {
         "refdes": "RS01SBPS-SF01A-3A-FLORTD101",
@@ -330,7 +330,7 @@ OOI_PROFILERS_CHL: dict[ProfilerSites, _OOISiteInfo] = {
         "short_name": "Fluorometer Chlorophyll",
         "lat": 44.529,
         "lon": -125.3893,
-        "depth": 2906,
+        "depth": 200,
     },
     ProfilerSites.CE06ISSP: {
         "refdes": "CE06ISSP-SP001-08-FLORTJ000",
@@ -357,6 +357,6 @@ OOI_PROFILERS_CHL: dict[ProfilerSites, _OOISiteInfo] = {
         "short_name": "Fluorometer Chlorophyll",
         "lat": 46.8517,
         "lon": 124.982,
-        "depth": 544,
+        "depth": 200,
     },
 }
