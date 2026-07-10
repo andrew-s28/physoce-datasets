@@ -350,7 +350,7 @@ class ProfilerCTD(_ProfilerBase):
         """Initialize the EAProfilerDownloader with parameters for downloading.
 
         Args:
-            site: Site identifier for the dataset. Required.
+            site: Site identifier for the dataset. View full list of valid sites at [ProfilerSites][physoce_datasets.download.ooi_ea.ProfilerSites]. Required.
             start_date: The start date for the dataset in "YYYY-MM-DD" format. If None, defaults to "2000-01-01".
             end_date: The end date for the dataset in "YYYY-MM-DD" format. If None, defaults to the current date.
             save_dir: The directory to save the downloaded dataset. If None, defaults to a "data" directory in the current working directory.
@@ -657,7 +657,7 @@ class ProfilerChlorophyll(_ProfilerBase):
         """Initialize the EAProfilerDownloader with parameters for downloading.
 
         Args:
-            site: Site identifier for the dataset. Must be one of the following: `CE01ISSP`, `CE02SHSP`, `CE04OSPS`, `CE06ISSP`, `CE07SHSP`, `CE09OSPM`, `RS01SBPS`. Required.
+            site: Site identifier for the dataset. View full list of valid sites at [ProfilerSites][physoce_datasets.download.ooi_ea.ProfilerSites]. Required.
             start_date: The start date for the dataset in "YYYY-MM-DD" format. If None, defaults to "2000-01-01".
             end_date: The end date for the dataset in "YYYY-MM-DD" format. If None, defaults to the current date.
             save_dir: The directory to save the downloaded dataset. If None, defaults to a "data" directory in the current working directory.
@@ -824,7 +824,7 @@ class MooringCTD(_MooringBase):
         """Initialize the EAMooringDownloader with parameters for downloading.
 
         Args:
-            site: Site identifier for the dataset (e.g., "CE01ISSM"). Must be one of the following: "CE01ISSM", "CE02SHSM", "CE04OSSM", "CE06ISSM", "CE07SHSM", "CE09OSSM". Required.
+            site: Site identifier for the dataset. View full list of valid sites at [MooringSites][physoce_datasets.download.ooi_ea.MooringSites]. Required.
             start_date: The start date for the dataset in "YYYY-MM-DD" format. If None, defaults to "2000-01-01".
             end_date: The end date for the dataset in "YYYY-MM-DD" format. If None, defaults to the current date.
             save_dir: The directory to save the downloaded dataset. If None, defaults to a "data" directory in the current working directory.
