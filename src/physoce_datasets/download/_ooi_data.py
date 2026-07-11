@@ -120,7 +120,6 @@ class ProfilerSites(StrEnum):
     - [`CE01ISSP`](https://oceanobservatories.org/site/ce01issp/)
     - [`CE02SHSP`](https://oceanobservatories.org/site/ce02shsp/)
     - [`CE04OSPS`](https://oceanobservatories.org/site/ce04osps/)
-    - [`CE04OSPD`](https://oceanobservatories.org/site/ce04ospd/)
     - [`CE06ISSP`](https://oceanobservatories.org/site/ce06issp/)
     - [`CE07SHSP`](https://oceanobservatories.org/site/ce07shsp/)
     - [`CE09OSPM`](https://oceanobservatories.org/site/ce09ospm/)
@@ -131,7 +130,6 @@ class ProfilerSites(StrEnum):
     CE01ISSP = "CE01ISSP"
     CE02SHSP = "CE02SHSP"
     CE04OSPS = "CE04OSPS"
-    CE04OSPD = "CE04OSPD"
     CE06ISSP = "CE06ISSP"
     CE07SHSP = "CE07SHSP"
     CE09OSPM = "CE09OSPM"
@@ -315,7 +313,7 @@ OOI_PROFILERS_CHL: dict[ProfilerSites, _OOISiteInfo] = {
         "depth": 80,
     },
     ProfilerSites.CE04OSPS: {
-        "refdes": "CE04OSPS-SF01B-2A-FLORTD104",
+        "refdes": "CE04OSPS-SF01B-3A-FLORTD104",
         "method": "streamed",
         "instrument": "flort_d_data_record",
         "short_name": "Fluorometer Chlorophyll",
@@ -342,7 +340,7 @@ OOI_PROFILERS_CHL: dict[ProfilerSites, _OOISiteInfo] = {
         "depth": 29,
     },
     ProfilerSites.CE07SHSP: {
-        "refdes": "CE07SHSP-SP001-08-FLORTJ000",
+        "refdes": "CE07SHSP-SP001-07-FLORTJ000",
         "method": "recovered_cspp",
         "instrument": "flort_sample",
         "short_name": "Fluorometer Chlorophyll",
@@ -351,7 +349,7 @@ OOI_PROFILERS_CHL: dict[ProfilerSites, _OOISiteInfo] = {
         "depth": 87,
     },
     ProfilerSites.CE09OSPM: {
-        "refdes": "CE09OSPM-WFP01-03-FLORTK000",
+        "refdes": "CE09OSPM-WFP01-04-FLORTK000",
         "method": "recovered_wfp",
         "instrument": "flort_sample",
         "short_name": "Fluorometer Chlorophyll",
