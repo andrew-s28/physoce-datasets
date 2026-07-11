@@ -604,9 +604,8 @@ class ProfilerCTD(_ProfilerBase):
 
         ds_concat = xr.concat(ds, dim="time", join="outer")
         ds_concat = ds_concat.sortby("time")  # ensure data is sorted by time after merging
-        ds_concat = ds_concat.resample(
-            time="1D"
-        ).mean()  # take daily mean after merging for deployments that overlap in end time date
+        # take daily mean after merging to handle deployments that overlap in end time date
+        ds_concat = ds_concat.resample(time="1D").mean()
         ds_concat = ds_concat.sel(
             time=slice(self.start_date, self.end_date)
         )  # subset to specified date range after merging
@@ -617,6 +616,7 @@ class ProfilerCTD(_ProfilerBase):
         ds_concat = ds_concat.interpolate_na(
             dim="time", method="linear", use_coordinate=True, max_gap=np.timedelta64(1, "D")
         )
+
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
             # calculate mixed layer depth using a density threshold of 0.03 kg/m^3
@@ -729,19 +729,20 @@ class ProfilerChlorophyll(_ProfilerBase):
                 ds.append(xr.open_dataset(io.BytesIO(r.content)))
                 ds[-1] = ds[-1].swap_dims({"obs": "time"}).squeeze()
                 ds[-1] = ds[-1].reset_coords(["lat", "lon", "depth"])
-                ds[-1] = ds[-1].where(ds[-1]["depth"] <= self.location.depth, drop=True)
+                ds[-1] = self._qc_check(
+                    ds[-1], variables=["fluorometric_cdom", "fluorometric_chlorophyll", "optical_backscatter"]
+                )
+                ds[-1] = self._drop_unused_vars(ds[-1])
                 ds[-1] = self._bin_dataset(ds[-1]).compute()
 
         ds_concat = xr.concat(ds, dim="time", join="outer")
         ds_concat = ds_concat.sortby("time")  # ensure data is sorted by time after merging
+        # take daily mean after merging to handle deployments that overlap in end time date
+        ds_concat = ds_concat.resample(time="1D").mean()
         ds_concat = ds_concat.sel(
             time=slice(self.start_date, self.end_date)
         )  # subset to specified date range after merging
 
-        ds_concat = self._qc_check(
-            ds_concat,
-            ["fluorometric_cdom", "fluorometric_chlorophyll", "optical_backscatter"],
-        )
         ds_concat = self._drop_unused_vars(ds_concat)
 
         # interpolate up to 5 meters
@@ -750,8 +751,6 @@ class ProfilerChlorophyll(_ProfilerBase):
         ds_concat = ds_concat.interpolate_na(
             dim="time", method="linear", use_coordinate=True, max_gap=np.timedelta64(1, "D")
         )
-
-        ds_concat = ds_concat.resample(time="1D").mean()
 
         ds_concat = ds_concat.assign_coords(
             {
