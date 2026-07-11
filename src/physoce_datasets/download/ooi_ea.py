@@ -158,7 +158,7 @@ class _OOIBase(_Downloader):
         ]
         return nc_files
 
-    def _list_files(self, url: str, tag: str = r".*\.nc$") -> list[str]:
+    def _list_files(self) -> list[str]:
         """List the netCDF data files in a THREDDS catalog.
 
         Args:
@@ -168,12 +168,15 @@ class _OOIBase(_Downloader):
         Returns:
             array: list of files in the catalog with the URL path set relative to the catalog
 
+        Raises:
+            ValueError: If no files are found for the specified location and date range.
+
         """
         with requests.session() as s:
-            page = s.get(url).text
+            page = s.get(self.search_url).text
 
         soup = BeautifulSoup(page, "html.parser")
-        pattern = re.compile(tag)
+        pattern = re.compile(self.tag)
         nc_files = []
         for node in soup.find_all("a"):
             href = node.get("href")
@@ -181,6 +184,9 @@ class _OOIBase(_Downloader):
                 nc_files.append(href)
         nc_files = [re.sub(r"catalog.html\?dataset=", "", file) for file in nc_files]
         nc_files = self._filter_dates(nc_files)
+        if not nc_files:
+            msg = f"No files found for {self.location} in the specified date range. Exiting download."
+            raise ValueError(msg)
         return nc_files
 
     @staticmethod
@@ -581,12 +587,7 @@ class ProfilerCTD(_ProfilerBase):
 
     def download(self) -> None:
         """Download the netCDF data files from the THREDDS catalog and save them to a local directory."""
-        logger.info(f"Getting list of data files for {self.location}...")
-        nc_files = self._list_files(self.search_url, self.tag)
-        if not nc_files:
-            logger.warning(f"No files found for {self.location} in the specified date range. Exiting download.")
-            return
-        download_urls = [self.base_url + f + "#mode=bytes" for f in nc_files]
+        download_urls = [self.base_url + f + "#mode=bytes" for f in self._list_files()]
 
         logger.info(f"Downloading files for {self.location}...")
         ds: list[xr.Dataset] = []
@@ -714,12 +715,7 @@ class ProfilerChlorophyll(_ProfilerBase):
 
     def download(self) -> None:
         """Download the netCDF data files from the THREDDS catalog and save them to a local directory."""
-        logger.info(f"Getting list of data files for {self.location}...")
-        nc_files = self._list_files(self.search_url, self.tag)
-        if not nc_files:
-            logger.warning(f"No files found for {self.location} in the specified date range. Exiting download.")
-            return
-        download_urls = [self.base_url + f + "#mode=bytes" for f in nc_files]
+        download_urls = [self.base_url + f + "#mode=bytes" for f in self._list_files()]
 
         logger.info(f"Downloading files for {self.location}...")
         ds: list[xr.Dataset] = []
@@ -885,12 +881,7 @@ class MooringCTD(_MooringBase):
 
     def download(self) -> None:
         """Download the netCDF data files from the THREDDS catalog and save them to a local directory."""
-        logger.info(f"Getting list of data files for {self.location}...")
-        nc_files = self._list_files(self.search_url, self.tag)
-        if not nc_files:
-            logger.warning(f"No files found for {self.location} in the specified date range. Exiting download.")
-            return
-        download_urls = [self.base_url + f + "#mode=bytes" for f in nc_files]
+        download_urls = [self.base_url + f + "#mode=bytes" for f in self._list_files()]
 
         logger.info(f"Downloading files for {self.location}...")
         ds: list[xr.Dataset] = []
