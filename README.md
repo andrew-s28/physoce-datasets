@@ -1,13 +1,10 @@
-# physoce-datasets
+# physoce-datasets: Expertly Crafted Oceanographic Datasets
 
-A Python package and command line interface aimed at standardizing the access of various oceanographic datasets and calculating derived parameters according to modern best practices.
+PhysOce Datasets is a Python package and command line interface that provides a downloading interface focused on ease-of-access to a variety of oceanographic datasets.
 
-> [!WARNING]
-> Due to issues with the [NASA Harmony API](https://forum.earthdata.nasa.gov/viewtopic.php?t=7954&sid=bdeec61e589c16e9d8642040d2fb01ff), the SST dataset is currently unavailable with an unknown fix timeline. Running any of the `sst` commands will fail with a `NotImplementedError` until this is fixed.
+## Why PhysOce Datasets?
 
-## Why physoce-datasets?
-
-This package provides an *opinionated* interface which aims to simplify and align access to datasets across providing institutions (NASA, ECMWF, etc.); as such, it is aimed primarily at those looking for streamlined data access. If you are an expert user who wants a lot of control over the details of the download and analysis process, this may not be for you. However, if you want:
+This package provides an *opinionated* interface which aims to simplify and align access to datasets across providing institutions (ECMWF, NSF, etc.); as such, it is aimed primarily at those looking for streamlined data access. If you are an expert user who wants a lot of control over the details of the download and analysis process, this may not be for you. However, if you want:
 
 - a unified command line and Python interface across datasets
 - expert-informed derived variables such as wind stress and eddy kinetic energy
@@ -16,7 +13,14 @@ This package provides an *opinionated* interface which aims to simplify and alig
 
 then this package is designed for you!
 
-## Install
+## Credentials
+
+Upon usage, this package may prompt for credentials to various data stores. Please refer to their documentation for how to setup and access credentials and how credentials are stored. Once stored, these should not require further maintenance.
+
+- [Copernicus Marine Services](https://toolbox-docs.marine.copernicus.eu/en/stable/usage/login-usage.html)
+- [Copernicus Climate Data Store](https://cds.climate.copernicus.eu/how-to-api)
+
+## Installation
 
 ### uv
 
@@ -33,7 +37,7 @@ Once you've added `physoce-datasets` to your project, you can import any of the 
 
 ```python
 # note the import uses underscore in place of dash
-from physoce_datasets import copernicus_marine, era5, ooi_ea
+from physoce_datasets import copernicus, era5, ooi
 ```
 
 Alternatively, you can run the command line interface from anywhere using [uv tools](https://docs.astral.sh/uv/guides/tools/):
@@ -53,14 +57,6 @@ source .venv/bin/activate
 pip install physoce-datasets
 ```
 
-## Credentials
-
-Upon usage, this package may prompt for credentials to various data stores. Please refer to their documentation for how to access credentials and how credentials are stored:
-
-- [Copernicus Marine Services](https://toolbox-docs.marine.copernicus.eu/en/stable/usage/login-usage.html)
-- [Copernicus Climate Data Store](https://cds.climate.copernicus.eu/how-to-api)
-- [NASA Earthdata](https://urs.earthdata.nasa.gov/users/new)
-
 ## Command Line Interface
 
 Run the CLI with uv:
@@ -75,11 +71,12 @@ Note that if you prefer the `pip` environment management, activate your environm
 python physoce-datasets --help
 ```
 
+### Provider Commands
+
 Top level commands are based on providing agency or program:
 
 - `copernicus-marine`: Data from [Copernicus Marine Services](https://marine.copernicus.eu/?pk_vid=f1c2c33510b8f44b178301966049ffbe).
 - `era5`: Data from [ERA5 single levels](https://cds.climate.copernicus.eu/datasets/reanalysis-era5-single-levels?tab=overview).
-- `nasa`: Data from NASA Harmony API. **Currently not implemented due to issues with the API, see warning above**.
 - `ooi-ea`: Data from [NSF Ocean Observatories Initiative Endurance Array](https://oceanobservatories.org/array/coastal-endurance/).
 
 Show provider command help, which will include available datasets for downloading:
@@ -88,62 +85,79 @@ Show provider command help, which will include available datasets for downloadin
 uv run physoce-datasets ooi-ea --help
 ```
 
-The specific dataset to download is specified after the provider:
-
-```bash
-uv run physoce-datasets ooi-ea profiler-chl --help
-```
-
-Available datasets are currently as follows:
-
-- `copernicus-marine`
-  - `eke`: Eddy kinetic energy derived from altimetric sea surface height anomalies.
-- `era5`
-  - `wind-stress`: Wind stress derived from ERA5 10 m winds using the [COARE 3.5 algorithm](https://github.com/pyCOARE/coare).
-- `nasa`
-  - `sst`: Multi-scale Ultra-high Resolution (MUR) sea surface temperature. **Currently not implemented due to issues with the API, see warning above**.
-- `ooi-ea`
-  - `mooring-ctd`: Temperature, salinity, pressure, and density derived from mooring-mounted CTDs.
-  - `profiler-ctd`: Mixed layer depth and stratification derived from temperature, salinity, pressure, and density from profiler-mounted CTDs.
-  - `profiler-chl`: Chlorophyll *a* derived from profiler-mounted fluorometers.
-
 ### Options
 
 All command line interfaces share the same base options:
 
-- `--location`: Location for the dataset in the format 'lon,lat' (e.g., '-132.0,36.55'). **Required for all commands!**
+- `--location`: Location either in the format of 'lon,lat' (e.g., '-132.0,36.55') for global datasets or 'site' (e.g., CE01ISSP) for moored datasets. **Required for all commands!**
+- `--instrument`: Download data from this instrument. **Required for all commands!**
 - `--save-dir`: Directory where the dataset file is written. If not set, defaults to `.data/`, relative to the current working directory.
 - `--save-file`: File name to save the dataset. If not set, a default file name based on the data to be downloaded will be used.
 - `--start-date`: Start date in `YYYY-MM-DD` format. If not set, uses `2000-01-01`, or the earliest available date, whichever is later.
 - `--end-date`: End date in `YYYY-MM-DD` format. If not set, uses the current date or the latest available date, whicher is earlier.
 
-### Examples
+### Available Datasets
 
-Run `eke` download with defaults:
+Available datasets are currently as follows:
+
+[`copernicus-marine`](/api/copernicus-marine)
+: - `eke`: Eddy kinetic energy derived from altimetric sea surface height anomalies.
+
+[`era5`](/api/era5)
+: - `wind-stress`: Wind stress derived from ERA5 10 m winds using the [COARE 3.5 algorithm](https://github.com/pyCOARE/coare).
+
+[`ooi-ea`](/api/ooi-ea)
+: - `ctd`: Temperature, salinity, pressure, and density.
+  - `fluorometer`: Chlorophyll *a* and colored dissolved organic matter (CDOM).
+  - `spectrophotometer`: Attenuation and absorption.
+  - `oxygen`: Dissolved oxygen.
+  - `nitrate`: Nitrate.
+  - `irradiance`: Spectral downwelling irradiance.
+  - `par`: Photosynthetically active radiation.
+
+Datasets are specified with the required `--dataset` option:
 
 ```bash
-uv run physoce-datasets copernicus-marine eke
+uv run physoce-datasets ooi-ea --location CE01ISSP --dataset ctd
 ```
 
-Run `wind-stress` with specified options:
+### Putting It All Together
+
+Run `copernicus` download with default options (location and dataset are always required!):
 
 ```bash
-uv run physoce-datasets era5 wind-stress --save-dir data --save-file wind-stress.nc --start-date 2020-01-01 --end-date 2020-01-31 --location -130,45
+uv run physoce-datasets copernicus --location -130,45 --dataset eke
+```
+
+Run `era5` with specified options:
+
+```bash
+uv run physoce-datasets era5 --location -130,45 --dataset wind-stress --save-dir data --save-file wind-stress.nc --start-date 2020-01-01 --end-date 2020-01-31
+```
+
+Run `ooi-ea` with default options:
+
+```bash
+uv run physoce-datasets ooi-ea --location CE02SHSM --dataset ctd
 ```
 
 ## Python Interface
 
-Downloaders can also be used within Python scripts and Python notebooks as well.
+Downloaders can also be used within Python scripts and Python notebooks as well. The Python interface follows one of two conventions, depending if the dataset is a [remote sensed or model](#remote-sensed-and-model-datasets) (e.g., ERA5) or [mooring based](#moored-datasets) (e.g., OOI Endurance Array).
 
-Importing and initializing the classes takes similar arguments as the command line interface:
+### Remote Sensed and Model Datasets
+
+!!! info
+    The Python interface uses `longitude` and `latitude` separately, rather than `--location lon,lat` as in the [command line interface](/usage/cli).
 
 ```python
-from physoce_datasets import copernicus_marine
+from physoce_datasets.copernicus import EddyKineticEnergy
 
 # initialize the downloader
-eke_downloader = copernicus_marine.EddyKineticEnergy(
-    latitude=45,
+eke_downloader = EddyKineticEnergy(
     longitude=-130,
+    latitude=45,
+    # optional arguments
     start_date="2020-01-01",
     end_date="2020-12-31",
     save_dir="data",
@@ -157,28 +171,56 @@ eke_downloader.download()
 ds = eke_downloader.open_dataset(**kwargs)
 ```
 
-`era5` and `nasa` downloaders follow the exact same interface.
+!!! tip
+    `era5` downloaders follow the exact same interface as above.
 
-The OOI Endurance Array downloaders follow a slightly different notation, using the `site` argument rather than `latitude` and `longitude`:
+### Moored Datasets
+
+Moored downloaders follow a slightly different notation, using the `site` and `dataset` arguments rather than `latitude` and `longitude`:
 
 ```python
-from physoce_datasets import ooi_ea
+from physoce_datasets.ooi import EnduranceArray
 
 # initialize the downloader
-eke_downloader = ooi_ea.ProfilerCTD(
+ea_downloader = EnduranceArray(
     site="CE02SHSP",  # case insensitive
+    dataset="ctd",  # case insensitive
     start_date="2020-01-01",
     end_date="2020-12-31",
     save_dir="data",
-    save_file="eke.nc",
+    save_file="ctd.nc",
 )
+
+ea_downloader.download()
 ```
 
-Available profiler sites are `CE01ISSP`, `CE02SHSP`, `CE04OSPS`, `CE04OSPD`, `CE06ISSP`, `CE07SHSP`, `CE09OSPM`, and `RS01SBPS`.
+Available sites can be found at the respective API Reference pages.
 
-Available mooring sites are `CE01ISSM`, `CE02SHSM`, `CE04OSSM`, `CE06ISSM`, `CE07SHSM`, and `CE09OSSM`.
+Enum classes are also provided for convenience. They can be used as follows:
 
-More information on these sites can be found at the [OOI Endurance Array](https://oceanobservatories.org/array/coastal-endurance/), the [OOI Cabled Endurance Array](https://oceanobservatories.org/array/cabled-and-endurance-arrays/), and the [OOI Cabled Continental Margin Array](https://oceanobservatories.org/array/cabled-continental-margin-array/) sites.
+```python
+# initialize the downloader
+ea_downloader = EnduranceArray(
+    site=EnduranceArray.ProfilerSites.CE02SHSP,  # using enum
+    dataset="ctd",
+    start_date="2020-01-01",
+    end_date="2020-12-31",
+    save_dir="data",
+    save_file="ctd.nc",
+)
+
+ea_downloader.download()
+```
+
+You can view available OOI Endurance Array sites and datasets with two functions:
+
+```python
+print("\n".join(EnduranceArray.list_sites()))
+
+print("\n".join(EnduranceArray.list_instruments(site=EnduranceArray.MooringSites.CE01ISSM)))
+```
+
+### Logging
 
 If you'd like to turn off logging in scripts, you can do so with the [Python standard library `logging` module](https://docs.python.org/3/library/logging.html):
 
@@ -210,8 +252,6 @@ If you'd like to contribute to the code or documentation, please refer to the de
     pre-commit install
     ```
 
-    If you're only updating code, you don't need the docs group. If you're only updating docs, you *do* need the dev group.
-
 4. Create a new branch with a helpful name:
 
     ```bash
@@ -225,10 +265,10 @@ If you'd like to contribute to the code or documentation, please refer to the de
     git push -u origin your-great-new-feature
     ```
 
-7. Open a [pull request in the upstream repository](https://github.com/andrew-s28/physoce-datasets/compare).
+7. [Open a pull request in the upstream repository](https://github.com/andrew-s28/physoce-datasets/compare).
 
 Thanks so much for contributing to open source code!
 
-### AI Contribution Policy
+## AI Contribution Policy
 
 We share the same [AI Usage Policy as xarray](https://docs.xarray.dev/en/stable/contribute/ai-policy.html). In short, this allows developers to use AI tools as a part of their development workflow, but requires that contributors understand all submitted code and take full responosiblity for their changes.

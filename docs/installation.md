@@ -17,7 +17,7 @@ Once you've added `physoce-datasets` to your project, you can import any of the 
 
 ```python
 # note the import uses underscore in place of dash
-from physoce_datasets import copernicus_marine, era5, ooi_ea
+from physoce_datasets import copernicus, era5, ooi
 ```
 
 Alternatively, you can run the command line interface from anywhere using [uv tools](https://docs.astral.sh/uv/guides/tools/):

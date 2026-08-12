@@ -1,0 +1,658 @@
+ctd_variables: &ctd_variables
+  - time
+  - depth
+  - sea_water_pressure
+  - sea_water_practical_salinity
+  - sea_water_temperature
+fluorometer_variables: &fluorometer_variables
+  - time
+  - depth
+  - fluorometric_cdom
+  - fluorometric_chlorophyll_a
+  - optical_backscatter
+  - total_volume_scattering_coefficient
+spectrophotometer_variables: &spectrophotometer_variables
+  - time
+  - depth
+  - optical_absorption
+  - beam_attenuation
+oxygen_variables: &oxygen_variables
+  - time
+  - depth
+  - dissolved_oxygen
+nitrate_variables: &nitrate_variables
+  - time
+  - depth
+  - salinity_corrected_nitrate
+irradiance_variables: &irradiance_variables
+  - time
+  - depth
+  - spectra
+  - spkir_abj_cspp_downwelling_vector
+parad_variables: &par_variables
+  - time
+  - depth
+  - parad_j_par_counts_output
+
+ctd_title: &ctd_title CTD Data from OOI Endurance Array Mooring
+fluorometer_title: &fluorometer_title Fluorometer Data from OOI Endurance Array Mooring
+spectrophotometer_title: &spectrophotometer_title Spectrophotometer Data from OOI Endurance Array Mooring
+oxygen_title: &oxygen_title Oxygen Data from OOI Endurance Array Mooring
+nitrate_title: &nitrate_title Nitrate Data from OOI Endurance Array Mooring
+irradiance_title: &irradiance_title Irradiance Data from OOI Endurance Array Mooring
+par_title: &par_title PAR Data from OOI Endurance Array Mooring
+
+ctd_description: &ctd_description CTD data from OOI Endurance Array moorings, obtained via the OOI THREDDS catalog. This dataset includes absolute salinity, conservative temperature, and density derived from practical salinity, temperature, and pressure calculated and provided by OOI.
+fluorometer_description: &fluorometer_description Fluorometer data from OOI Endurance Array moorings, obtained via the OOI THREDDS catalog. This dataset includes processed variables such as chlorophyll a concentration, colored dissolved organic matter concentration (CDOM), optical backscatter, and total volume scattering coefficient calculated and provided by OOI.
+spectrophotometer_description: &spectrophotometer_description Spectrophotometer data from OOI Endurance Array moorings, obtained via the OOI THREDDS catalog. This dataset includes processed variables such as optical absorption and beam attenuation calculated and provided by OOI.
+oxygen_description: &oxygen_description Oxygen data from OOI Endurance Array moorings, obtained via the OOI THREDDS catalog. This dataset includes dissolved oxygen concentration calculated and provided by OOI.
+nitrate_description: &nitrate_description Nitrate data from OOI Endurance Array moorings, obtained via the OOI THREDDS catalog. This dataset includes nitrate concentration calculated and provided by OOI.
+irradiance_description: &irradiance_description Irradiance data from OOI Endurance Array moorings, obtained via the OOI THREDDS catalog. This dataset includes downwelling spectral irradiance calculated and provided by OOI.
+par_description: &par_description PAR data from OOI Endurance Array moorings, obtained via the OOI THREDDS catalog. This dataset includes photosynthetically active radiation (PAR) calculated and provided by OOI.
+
+CE01ISSM:
+  name: Oregon Inshore Surface Mooring
+  site: CE01ISSM
+  description: near-surface instrument frame mounted at nominal 7 m depth on the Oregon inner continental shelf in 25 m water depth roughly 2 km offshore.
+  doi: https://doi.org/10.58046/OOI-CE01ISSM
+  lat: 44.6598
+  lon: -124.095
+  water_depth: 25
+  valid_depth: 10
+  type: mooring
+  instruments:
+    ctd:
+      refdes: CE01ISSM-RID16-03-CTDBPC000
+      method: recovered_inst
+      stream: ctdbp_cdef_instrument_recovered
+      variables: *ctd_variables
+      description: *ctd_description
+      title: *ctd_title
+    fluorometer:
+      refdes: CE01ISSM-RID16-02-FLORTD000
+      method: recovered_host
+      stream: flort_sample
+      variables: *fluorometer_variables
+      description: *fluorometer_description
+      title: *fluorometer_title
+    spectrophotometer:
+      refdes: CE01ISSM-RID16-01-OPOTAAD000
+      method: recovered_host
+      stream: optaa_dj_dcl_instrument_recovered
+      variables: *spectrophotometer_variables
+      description: *spectrophotometer_description
+      title: *spectrophotometer_title
+    oxygen:
+      refdes: CE01ISSM-RID16-03-DOSTAD000
+      method: recovered_inst
+      stream: dosta_abcdjm_ctdbp_instrument_recovered
+      variables: *oxygen_variables
+      description: *oxygen_description
+      title: *oxygen_title
+    nitrate:
+      refdes: CE01ISSM-RID16-07-NUTNRB000
+      method: recovered_inst
+      stream: nutnr_b_instrument_recovered
+      variables: *nitrate_variables
+      description: *nitrate_description
+      title: *nitrate_title
+    irradiance:
+      refdes: CE01ISSM-RID16-08-SPKIRB000
+      method: recovered_host
+      stream: spkir_abj_dcl_instrument_recovered
+      variables: *irradiance_variables
+      description: *irradiance_description
+      title: *irradiance_title
+
+CE02SHSM:
+  name: Oregon Shelf Surface Mooring
+  site: CE02SHSM
+  description: near-surface instrument frame mounted at nominal 7 m depth on the Oregon continental shelf in 80 m water depth roughly 20 km offshore.
+  doi: https://doi.org/10.58046/OOI-CE02SHSM
+  lat: 44.6393
+  lon: -124.304
+  water_depth: 80
+  valid_depth: 10
+  type: mooring
+  instruments:
+    ctd:
+      refdes: CE02SHSM-RID27-03-CTDBPC000
+      method: recovered_inst
+      stream: ctdbp_cdef_instrument_recovered
+      variables: *ctd_variables
+      description: *ctd_description
+      title: *ctd_title
+    fluorometer:
+      refdes: CE02SHSM-RID27-02-FLORTD000
+      method: recovered_host
+      stream: flort_sample
+      variables: *fluorometer_variables
+      description: *fluorometer_description
+      title: *fluorometer_title
+    spectrophotometer:
+      refdes: CE02SHSM-RID27-01-OPTAAD000
+      method: recovered_host
+      stream: optaa_dj_dcl_instrument_recovered
+      variables: *spectrophotometer_variables
+      description: *spectrophotometer_description
+      title: *spectrophotometer_title
+    oxygen:
+      refdes: CE02SHSM-RID27-04-DOSTAD000
+      method: recovered_host
+      stream: dosta_abcdjm_dcl_instrument_recovered
+      variables: *oxygen_variables
+      description: *oxygen_description
+      title: *oxygen_title
+    nitrate:
+      refdes: CE02SHSM-RID26-07-NUTNRB000
+      method: recovered_inst
+      stream: suna_instrument_recovered
+      variables: *nitrate_variables
+      description: *nitrate_description
+      title: *nitrate_title
+    irradiance:
+      refdes: CE02SHSM-RID26-08-SPKIRB000
+      method: recovered_host
+      stream: spkir_abj_dcl_instrument_recovered
+      variables: *irradiance_variables
+      description: *irradiance_description
+      title: *irradiance_title
+
+CE04OSSM:
+  name: Oregon Offshore Surface Mooring
+  site: CE04OSSM
+  description: near-surface instrument frame mounted at nominal 7 m depth on the Oregon offshore continental shelf in 588 m water depth roughly 70 km offshore.
+  doi: https://doi.org/10.58046/OOI-CE04OSSM
+  lat: 44.3811
+  lon: -124.956
+  water_depth: 588
+  valid_depth: 10
+  type: mooring
+  instruments:
+    ctd:
+      refdes: CE04OSSM-RID27-03-CTDBPC000
+      method: recovered_inst
+      stream: ctdbp_cdef_instrument_recovered
+      variables: *ctd_variables
+      description: *ctd_description
+      title: *ctd_title
+    fluorometer:
+      refdes: CE04OSSM-RID27-02-FLORTD000
+      method: recovered_host
+      stream: flort_sample
+      variables: *fluorometer_variables
+      description: *fluorometer_description
+      title: *fluorometer_title
+    spectrophotometer:
+      refdes: CE04OSSM-RID27-01-OPTAAD000
+      method: recovered_host
+      stream: optaa_dj_dcl_instrument_recovered
+      variables: *spectrophotometer_variables
+      description: *spectrophotometer_description
+      title: *spectrophotometer_title
+    oxygen:
+      refdes: CE04OSSM-RID27-04-DOSTAD000
+      method: recovered_host
+      stream: dosta_abcdjm_dcl_instrument_recovered
+      variables: *oxygen_variables
+      description: *oxygen_description
+      title: *oxygen_title
+    nitrate:
+      refdes: CE04OSSM-RID26-07-NUTNRB000
+      method: recovered_inst
+      stream: suna_instrument_recovered
+      variables: *nitrate_variables
+      description: *nitrate_description
+      title: *nitrate_title
+    irradiance:
+      refdes: CE04OSSM-RID26-08-SPKIRB000
+      method: recovered_host
+      stream: spkir_abj_dcl_instrument_recovered
+      variables: *irradiance_variables
+      description: *irradiance_description
+      title: *irradiance_title
+
+CE06ISSM:
+  name: Washington Inshore Surface Mooring
+  site: CE06ISSM
+  description: near-surface instrument frame mounted at nominal 7 m depth on the Washington inshore continental shelf in 30 m water depth roughly 2 km offshore.
+  doi: https://doi.org/10.58046/OOI-CE06ISSM
+  lat: 47.1336
+  lon: -124.272
+  water_depth: 29
+  valid_depth: 10
+  type: mooring
+  instruments:
+    ctd:
+      refdes: CE06ISSM-RID16-03-CTDBPC000
+      method: recovered_inst
+      stream: ctdbp_cdef_instrument_recovered
+      variables: *ctd_variables
+      description: *ctd_description
+      title: *ctd_title
+    fluorometer:
+      refdes: CE06ISSM-RID16-02-FLORTD000
+      method: recovered_host
+      stream: flort_sample
+      variables: *fluorometer_variables
+      description: *fluorometer_description
+      title: *fluorometer_title
+    spectrophotometer:
+      refdes: CE06ISSM-RID16-01-OPTAAD000
+      method: recovered_host
+      stream: optaa_dj_dcl_instrument_recovered
+      variables: *spectrophotometer_variables
+      description: *spectrophotometer_description
+      title: *spectrophotometer_title
+    oxygen:
+      refdes: CE06ISSM-RID16-03-DOSTAD000
+      method: recovered_inst
+      stream: dosta_abcdjm_ctdbp_instrument_recovered
+      variables: *oxygen_variables
+      description: *oxygen_description
+      title: *oxygen_title
+    nitrate:
+      refdes: CE06ISSM-RID16-07-NUTNRB000
+      method: recovered_inst
+      stream: suna_instrument_recovered
+      variables: *nitrate_variables
+      description: *nitrate_description
+      title: *nitrate_title
+    irradiance:
+      refdes: CE06ISSM-RID16-08-SPKIRB000
+      method: recovered_host
+      stream: spkir_abj_dcl_instrument_recovered
+      variables: *irradiance_variables
+      description: *irradiance_description
+      title: *irradiance_title
+
+CE07SHSM:
+  name: Washington Shelf Surface Mooring
+  site: CE07SHSM
+  description: near-surface instrument frame mounted at nominal 7 m depth on the Washington continental shelf in 80 m water depth roughly 20 km offshore.
+  doi: https://doi.org/10.58046/OOI-CE07SHSM
+  lat: 46.9859
+  lon: -124.566
+  water_depth: 87
+  valid_depth: 10
+  type: mooring
+  instruments:
+    ctd:
+      refdes: CE07SHSM-RID27-03-CTDBPC000
+      method: recovered_inst
+      stream: ctdbp_cdef_instrument_recovered
+      variables: *ctd_variables
+      description: *ctd_description
+      title: *ctd_title
+    fluorometer:
+      refdes: CE07SHSM-RID27-02-FLORTD000
+      method: recovered_host
+      stream: flort_sample
+      variables: *fluorometer_variables
+      description: *fluorometer_description
+      title: *fluorometer_title
+    spectrophotometer:
+      refdes: CE07SHSM-RID27-01-OPTAAD000
+      method: recovered_host
+      stream: optaa_dj_dcl_instrument_recovered
+      variables: *spectrophotometer_variables
+      description: *spectrophotometer_description
+      title: *spectrophotometer_title
+    oxygen:
+      refdes: CE07SHSM-RID27-04-DOSTAD000
+      method: recovered_host
+      stream: dosta_abcdjm_dcl_instrument_recovered
+      variables: *oxygen_variables
+      description: *oxygen_description
+      title: *oxygen_title
+    nitrate:
+      refdes: CE07SHSM-RID26-07-NUTNRB000
+      method: recovered_inst
+      stream: suna_instrument_recovered
+      variables: *nitrate_variables
+      description: *nitrate_description
+      title: *nitrate_title
+    irradiance:
+      refdes: CE07SHSM-RID26-08-SPKIRB000
+      method: recovered_host
+      stream: spkir_abj_dcl_instrument_recovered
+      variables: *irradiance_variables
+      description: *irradiance_description
+      title: *irradiance_title
+
+CE09OSSM:
+  name: Washington Offshore Surface Mooring
+  site: CE09OSSM
+  description: near-surface instrument frame mounted at nominal 7 m depth on the Washington offshore continental shelf in 588 m water depth roughly 70 km offshore.
+  doi: https://doi.org/10.58046/OOI-CE09OSSM
+  lat: 46.8508
+  lon: -124.972
+  water_depth: 542
+  valid_depth: 10
+  type: mooring
+  instruments:
+    ctd:
+      refdes: CE09OSSM-RID27-03-CTDBPC000
+      method: recovered_inst
+      stream: ctdbp_cdef_instrument_recovered
+      variables: *ctd_variables
+      description: *ctd_description
+      title: *ctd_title
+    fluorometer:
+      refdes: CE09OSSM-RID27-02-FLORTD000
+      method: recovered_host
+      stream: flort_sample
+      variables: *fluorometer_variables
+      description: *fluorometer_description
+      title: *fluorometer_title
+    spectrophotometer:
+      refdes: CE09OSSM-RID27-01-OPTAAD000
+      method: recovered_host
+      stream: optaa_dj_dcl_instrument_recovered
+      variables: *spectrophotometer_variables
+      description: *spectrophotometer_description
+      title: *spectrophotometer_title
+    oxygen:
+      refdes: CE09OSSM-RID27-04-DOSTAD000
+      method: recovered_host
+      stream: dosta_abcdjm_dcl_instrument_recovered
+      variables: *oxygen_variables
+      description: *oxygen_description
+      title: *oxygen_title
+    nitrate:
+      refdes: CE09OSSM-RID26-07-NUTNRB000
+      method: recovered_inst
+      stream: suna_instrument_recovered
+      variables: *nitrate_variables
+      description: *nitrate_description
+      title: *nitrate_title
+    irradiance:
+      refdes: CE09OSSM-RID26-08-SPKIRB000
+      method: recovered_host
+      stream: spkir_abj_dcl_instrument_recovered
+      variables: *irradiance_variables
+      description: *irradiance_description
+      title: *irradiance_title
+
+CE01ISSP:
+  name: Oregon Inshore Surface Piercing Profiler Mooring
+  site: CE01ISSP
+  description: WET Labs Autonomous Moored Profiler (AMP) mooring deployed on the Oregon inner continental shelf in 25 m water depth roughly 2 km offshore.
+  doi: https://doi.org/10.58046/OOI-CE01ISSP
+  lat: 44.662
+  lon: -124.096
+  water_depth: 25
+  valid_depth: 30
+  type: profiler
+  instruments:
+    ctd:
+      refdes: CE01ISSP-SP001-09-CTDPFJ000
+      method: recovered_cspp
+      stream: ctdpf_j_cspp_instrument_recovered
+      variables: *ctd_variables
+      description: *ctd_description
+      title: *ctd_title
+    fluorometer:
+      refdes: CE01ISSP-SP001-08-FLORTJ000
+      method: recovered_cspp
+      stream: flort_sample
+      variables: *fluorometer_variables
+      description: *fluorometer_description
+      title: *fluorometer_title
+    spectrophotometer:
+      refdes: CE01ISSP-SP001-04-OPTAAJ000
+      method: recovered_cspp
+      stream: optaa_dj_cspp_instrument_recovered
+      variables: *spectrophotometer_variables
+      description: *spectrophotometer_description
+      title: *spectrophotometer_title
+    oxygen:
+      refdes: CE01ISSP-SP001-02-DOSTAJ000
+      method: recovered_cspp
+      stream: dosta_abcdjm_cspp_instrument_recovered
+      variables: *oxygen_variables
+      description: *oxygen_description
+      title: *oxygen_title
+    nitrate:
+      refdes: CE01ISSP-SP001-06-NUTNRJ000
+      method: recovered_cspp
+      stream: nutnr_j_cspp_instrument_recovered
+      variables: *nitrate_variables
+      description: *nitrate_description
+      title: *nitrate_title
+    irradiance:
+      refdes: CE01ISSP-SP001-07-SPKIRJ000
+      method: recovered_cspp
+      stream: spkir_abj_cspp_instrument_recovered
+      variables: *irradiance_variables
+      description: *irradiance_description
+      title: *irradiance_title
+    par:
+      refdes: CE01ISSP-SP001-10-PARADJ000
+      method: recovered_cspp
+      stream: parad_j_cspp_instrument_recovered
+      variables: *par_variables
+      description: *par_description
+      title: *par_title
+
+CE02SHSP:
+  name: Oregon Shelf Surface Piercing Profiler Mooring
+  site: CE02SHSP
+  description: WET Labs Autonomous Moored Profiler (AMP) mooring deployed on the Oregon continental shelf in 80 m water depth roughly 20 km offshore.
+  doi: https://doi.org/10.58046/OOI-CE02SHSP
+  lat: 44.6372
+  lon: -124.299
+  water_depth: 81
+  valid_depth: 85
+  type: profiler
+  instruments:
+    ctd:
+      refdes: CE02SHSP-SP001-08-CTDPFJ000
+      method: recovered_cspp
+      stream: ctdpf_j_cspp_instrument_recovered
+      variables: *ctd_variables
+      description: *ctd_description
+      title: *ctd_title
+    fluorometer:
+      refdes: CE02SHSP-SP001-07-FLORTJ000
+      method: recovered_cspp
+      stream: flort_sample
+      variables: *fluorometer_variables
+      description: *fluorometer_description
+      title: *fluorometer_title
+    spectrophotometer:
+      refdes: CE02SHSP-SP001-04-OPTAAJ000
+      method: recovered_cspp
+      stream: optaa_dj_cspp_instrument_recovered
+      variables: *spectrophotometer_variables
+      description: *spectrophotometer_description
+      title: *spectrophotometer_title
+    oxygen:
+      refdes: CE02SHSP-SP001-01-DOSTAJ000
+      method: recovered_cspp
+      stream: dosta_abcdjm_cspp_instrument_recovered
+      variables: *oxygen_variables
+      description: *oxygen_description
+      title: *oxygen_title
+    nitrate:
+      refdes: CE02SHSP-SP001-05-NUTNRJ000
+      method: recovered_cspp
+      stream: nutnr_j_cspp_instrument_recovered
+      variables: *nitrate_variables
+      description: *nitrate_description
+      title: *nitrate_title
+    irradiance:
+      refdes: CE02SHSP-SP001-06-SPKIRJ000
+      method: recovered_cspp
+      stream: spkir_abj_cspp_instrument_recovered
+      variables: *irradiance_variables
+      description: *irradiance_description
+      title: *irradiance_title
+    par:
+      refdes: CE02SHSP-SP001-09-PARADJ000
+      method: recovered_cspp
+      stream: parad_j_cspp_instrument_recovered
+      variables: *par_variables
+      description: *par_description
+      title: *par_title
+
+CE06ISSP:
+  name: Washington Inshore Surface Piercing Profiler Mooring
+  site: CE06ISSP
+  description: WET Labs Autonomous Moored Profiler (AMP) mooring deployed on the Washington inner continental shelf in 30 m water depth roughly 2 km offshore.
+  doi: https://doi.org/10.58046/OOI-CE06ISSP
+  lat: 47.136
+  lon: -124.269
+  water_depth: 29
+  valid_depth: 35
+  type: profiler
+  instruments:
+    ctd:
+      refdes: CE06ISSP-SP001-09-CTDPFJ000
+      method: recovered_cspp
+      stream: ctdpf_j_cspp_instrument_recovered
+      variables: *ctd_variables
+      description: *ctd_description
+      title: *ctd_title
+    fluorometer:
+      refdes: CE06ISSP-SP001-08-FLORTJ000
+      method: recovered_cspp
+      stream: flort_sample
+      variables: *fluorometer_variables
+      description: *fluorometer_description
+      title: *fluorometer_title
+    spectrophotometer:
+      refdes: CE06ISSP-SP001-04-OPTAAJ000
+      method: recovered_cspp
+      stream: optaa_dj_cspp_instrument_recovered
+      variables: *spectrophotometer_variables
+      description: *spectrophotometer_description
+      title: *spectrophotometer_title
+    oxygen:
+      refdes: CE06ISSP-SP001-02-DOSTAJ000
+      method: recovered_cspp
+      stream: dosta_abcdjm_cspp_instrument_recovered
+      variables: *oxygen_variables
+      description: *oxygen_description
+      title: *oxygen_title
+    nitrate:
+      refdes: CE06ISSP-SP001-06-NUTNRJ000
+      method: recovered_cspp
+      stream: nutnr_j_cspp_instrument_recovered
+      variables: *nitrate_variables
+      description: *nitrate_description
+      title: *nitrate_title
+    irradiance:
+      refdes: CE06ISSP-SP001-07-SPKIRJ000
+      method: recovered_cspp
+      stream: spkir_abj_cspp_instrument_recovered
+      variables: *irradiance_variables
+      description: *irradiance_description
+      title: *irradiance_title
+    par:
+      refdes: CE06ISSP-SP001-10-PARADJ000
+      method: recovered_cspp
+      stream: parad_j_cspp_instrument_recovered
+      variables: *par_variables
+      description: *par_description
+      title: *par_title
+
+CE07SHSP:
+  name: Washington Shelf Surface Piercing Profiler Mooring
+  site: CE07SHSP
+  description: WET Labs Autonomous Moored Profiler (AMP) mooring deployed on the Washington continental shelf in 90 m water depth roughly 20 km offshore.
+  doi: https://doi.org/10.58046/OOI-CE07SHSP
+  lat: 46.9859
+  lon: -124.566
+  water_depth: 87
+  valid_depth: 90
+  type: profiler
+  instruments:
+    ctd:
+      refdes: CE07SHSP-SP001-08-CTDPFJ000
+      method: recovered_cspp
+      stream: ctdpf_j_cspp_instrument_recovered
+      variables: *ctd_variables
+      description: *ctd_description
+      title: *ctd_title
+    fluorometer:
+      refdes: CE07SHSP-SP001-07-FLORTJ000
+      method: recovered_cspp
+      stream: flort_sample
+      variables: *fluorometer_variables
+      description: *fluorometer_description
+      title: *fluorometer_title
+    spectrophotometer:
+      refdes: CE07SHSP-SP001-04-OPTAAJ000
+      method: recovered_cspp
+      stream: optaa_dj_cspp_instrument_recovered
+      variables: *spectrophotometer_variables
+      description: *spectrophotometer_description
+      title: *spectrophotometer_title
+    oxygen:
+      refdes: CE07SHSP-SP001-01-DOSTAJ000
+      method: recovered_cspp
+      stream: dosta_abcdjm_cspp_instrument_recovered
+      variables: *oxygen_variables
+      description: *oxygen_description
+      title: *oxygen_title
+    nitrate:
+      refdes: CE07SHSP-SP001-05-NUTNRJ000
+      method: recovered_cspp
+      stream: nutnr_j_cspp_instrument_recovered
+      variables: *nitrate_variables
+      description: *nitrate_description
+      title: *nitrate_title
+    irradiance:
+      refdes: CE07SHSP-SP001-06-SPKIRJ000
+      method: recovered_cspp
+      stream: spkir_abj_cspp_instrument_recovered
+      variables: *irradiance_variables
+      description: *irradiance_description
+      title: *irradiance_title
+    par:
+      refdes: CE07SHSP-SP001-09-PARADJ000
+      method: recovered_cspp
+      stream: parad_j_cspp_instrument_recovered
+      variables: *par_variables
+      description: *par_description
+
+CE09OSPM:
+  name: Washington Offshore Profiler Mooring
+  site: CE09OSPM
+  description: Wire-following profiler mooring deployed on the Washington offshore continental shelf in 544 m water depth roughly 70 km offshore.
+  doi: https://doi.org/10.58046/OOI-CE09OSPM
+  lat: 46.8517
+  lon: -124.982
+  water_depth: 544
+  valid_depth: 550
+  type: profiler
+  instruments:
+    ctd:
+      refdes: CE09OSPM-WFP01-03-CTDPFK000
+      method: recovered_wfp
+      stream: ctdpf_ckl_wfp_instrument_recovered
+      variables: *ctd_variables
+      description: *ctd_description
+      title: *ctd_title
+    fluorometer:
+      refdes: CE09OSPM-WFP01-04-FLORTK000
+      method: recovered_wfp
+      stream: flort_sample
+      variables: *fluorometer_variables
+      description: *fluorometer_description
+      title: *fluorometer_title
+    oxygen:
+      refdes: CE09OSPM-WFP01-02-DOFSTK000
+      method: recovered_wfp
+      stream: dofst_k_wfp_instrument_recovered
+      variables: *oxygen_variables
+      description: *oxygen_description
+      title: *oxygen_title
+    par:
+      refdes: CE09OSPM-WFP01-05-PARADK000
+      method: recovered_wfp
+      stream: parad_k__stc_imodem_instrument_recovered
+      variables: *par_variables
+      description: *par_description
+      title: *par_title

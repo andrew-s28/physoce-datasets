@@ -1,0 +1,107 @@
+# mapping of OOI variable names to standard names and units
+common:
+  time:
+    name: time
+    long_name: Time
+    standard_name: time
+  depth:
+    name: depth
+    long_name: Depth
+    standard_name: depth
+    units: m
+ctd:
+  # OOI variables
+  pressure:
+    name: pressure
+    long_name: Pressure
+    standard_name: sea_water_pressure
+    units: dbar
+  sea_water_practical_salinity:
+    name: practical_salinity
+    long_name: Practical Salinity
+    standard_name: sea_water_practical_salinity
+    units: 1
+  sea_water_temperature:
+    name: temperature
+    long_name: Temperature
+    standard_name: sea_water_temperature
+    units: deg_C
+  # derived variables
+  absolute_salinity:
+    name: absolute_salinity
+    long_name: Absolute Salinity
+    standard_name: sea_water_absolute_salinity
+    units: g kg^-1
+  conservative_temperature:
+    name: conservative_temperature
+    long_name: Conservative Temperature
+    standard_name: sea_water_conservative_temperature
+    units: deg_C
+  potential_density_anomaly:
+    name: potential_density_anomaly
+    long_name: Potential Density Anomaly
+    standard_name: sea_water_sigma_theta
+    units: kg m^-3
+    reference_pressure: 0 dbar
+fluorometer:
+  # ooi variables
+  fluorometric_chlorophyll_a:
+    name: chlorophyll_a
+    long_name: Chlorophyll a Concentration
+    standard_name: mass_concentration_of_chlorophyll_a_in_sea_water
+    units: mg m^-3
+  fluorometric_cdom:
+    name: cdom
+    long_name: Colored Dissolved Organic Matter (CDOM) Concentration
+    standard_name: concentration_of_colored_dissolved_organic_matter_in_sea_water
+    units: ppb
+  optical_backscatter:
+    name: optical_backscatter
+    long_name: Optical Backscatter
+    standard_name: sea_water_volume_backscattering_coefficient
+    units: m^-1
+  total_volume_scattering_coefficient:
+    name: total_volume_scattering_coefficient
+    long_name: Total Volume Scattering Coefficient
+    standard_name: sea_water_total_volume_scattering_coefficient
+    units: m^-1 sr^-1
+spectrometer:
+  # ooi variables
+  optical_absorption:
+    name: optical_absorption
+    long_name: Optical Absorption
+    standard_name: volume_absorption_coefficient_in_sea_water
+    units: m^-1
+  beam_attenuation:
+    name: beam_attenuation
+    long_name: Beam Attenuation
+    standard_name: volume_beam_attenuation_coefficient_in_sea_water
+    units: m^-1
+oxygen:
+  # ooi variables
+  dissolved_oxygen:
+    name: dissolved_oxygen
+    long_name: Dissolved Oxygen Concentration
+    standard_name: moles_of_oxygen_per_unit_mass_in_sea_water
+    units: umol kg^-1
+nitrate:
+  # ooi variables
+  salinity_corrected_nitrate:
+    name: nitrate
+    long_name: Nitrate Concentration
+    standard_name: mole_concentration_of_nitrate_in_sea_water
+    units: mmol m^-3
+irradiance:
+  # ooi variables
+  spkir_abj_cspp_downwelling_vector:
+    name: downwelling_irradiance
+    long_name: Downwelling Irradiance
+    standard_name: downwelling_spectral_spherical_irradiance_in_sea_water
+    units: uW cm^-2 nm^-1
+par:
+  # ooi variables
+  parad_j_par_counts_output:
+    name: photosynthetically_active_radiation
+    long_name: Photosynthetically Active Radiation Flux
+    standard_name: downwelling_photosynthetic_photon_flux_in_sea_water
+    units: umol m^-2 s^-1

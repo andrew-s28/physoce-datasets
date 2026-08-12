@@ -1,5 +1,5 @@
 ---
-title: ERA5
+title: ECMWF ERA5 Data
 ---
 
-::: physoce_datasets.download.era5
+::: physoce_datasets.era5

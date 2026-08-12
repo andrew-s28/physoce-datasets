@@ -127,23 +127,21 @@ def parse_lonlat(location_str: str) -> LonLat:
     return LonLat(lon=lon, lat=lat)
 
 
-class _Downloader(ABC):
+class Downloader(ABC):
     """Abstract base class for dataset downloaders."""
 
     def __init__(
         self,
-        save_file_prefix: str,
+        save_file: str,
         save_dir: str | None = None,
-        save_file: str | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
     ) -> None:
         """Initialize the downloader.
 
         Args:
-            save_file_prefix (str): A prefix to add to the saved file name.
+            save_file (str): The file name to save the downloaded dataset.
             save_dir (str | None): The directory to save the downloaded dataset. If None, defaults to a "data" directory in the current working directory.
-            save_file (str | None): The file name to save the downloaded dataset. If None, defaults to a name based on the dataset and date range.
             start_date (str | None): The start date for the dataset in "YYYY-MM-DD" format. If None, defaults to "2000-01-01".
             end_date (str | None): The end date for the dataset in "YYYY-MM-DD" format. If None, defaults to the current date.
 
@@ -157,8 +155,6 @@ class _Downloader(ABC):
         self.start_date = start_date
         self.end_date = end_date
         self.save_dir = self._create_data_dir(save_dir)
-        if save_file is None:
-            save_file = f"{save_file_prefix}_{self.start_date}_{self.end_date}.nc"
         self.save_file = save_file
         self.save_file_path = self._create_save_file(self.save_dir, self.save_file)
 

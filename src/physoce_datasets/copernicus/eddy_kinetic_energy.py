@@ -11,9 +11,7 @@ import click
 import copernicusmarine
 import xarray as xr
 
-from physoce_datasets.logging import logger
-
-from ._base import LonLat, _Downloader
+from physoce_datasets._util import Downloader, LonLat, logger
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -48,7 +46,7 @@ def login_to_copernicus_marine() -> None:
     logger.info("Login successful!")
 
 
-class EddyKineticEnergy(_Downloader):
+class EddyKineticEnergy(Downloader):
     """Downloader for geostrophic surface eddy kinetic energy (EKE) data from AVISO data through Copernicus Marine."""
 
     def __init__(
@@ -72,10 +70,13 @@ class EddyKineticEnergy(_Downloader):
 
         """
         self.location = LonLat(lon=longitude, lat=latitude)
+
+        if save_file is None:
+            save_file = "copernicus_marine_altimeter_eke.nc"
+
         super().__init__(
-            save_file_prefix="altimeter_eke_sla",
-            save_dir=save_dir,
             save_file=save_file,
+            save_dir=save_dir,
             start_date=start_date,
             end_date=end_date,
         )
@@ -190,12 +191,13 @@ class EddyKineticEnergy(_Downloader):
         existing_history = ds.attrs.pop("history", "")
         ds.attrs.update(
             {
+                "title": "Geostrophic surface eddy kinetic energy from AVISO data through Copernicus Marine",
                 "description": "Sea surface height anomalies, geostrophic velocity anomalies, and derived eddy kinetic energy from CNES/CLS DUACS obtained via Copernicus Marine Service. ",
                 "last updated": datetime.now(UTC).isoformat(timespec="minutes"),
                 "history": existing_history
                 + "\n"
                 + f"{datetime.now(UTC).isoformat(timespec='minutes')} Downloaded and processed data using physoce-datasets (https://github.com/physoce/physoce-datasets)",
-                "doi": "10.48670/moi-00148",  # https://data.marine.copernicus.eu/product/SEALEVEL_GLO_PHY_L4_MY_008_047/description
+                "doi": "https://doi.org/10.48670/moi-00148",  # https://data.marine.copernicus.eu/product/SEALEVEL_GLO_PHY_L4_MY_008_047/description
                 "geospatial_lat_min": ds["latitude"].min().item(),
                 "geospatial_lat_max": ds["latitude"].max().item(),
                 "geospatial_lon_min": ds["longitude"].min().item(),

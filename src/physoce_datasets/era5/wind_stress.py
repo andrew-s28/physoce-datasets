@@ -16,9 +16,7 @@ from metpy.calc import relative_humidity_from_dewpoint
 from metpy.units import units
 from pycoare import coare_35
 
-from physoce_datasets.logging import logger
-
-from ._base import LonLat, _Downloader
+from physoce_datasets._util import Downloader, LonLat, logger
 
 __all__ = ["WindStress"]
 
@@ -71,7 +69,7 @@ def login_to_ecmwf_datastore() -> Client:
     return client
 
 
-class WindStress(_Downloader):
+class WindStress(Downloader):
     """Downloader for ERA5-based wind stress datasets from the ECMWF Data Store."""
 
     def __init__(
@@ -95,10 +93,13 @@ class WindStress(_Downloader):
 
         """
         self.location = LonLat(lon=longitude, lat=latitude)
+
+        if save_file is None:
+            save_file = "era5_reanalysis_wind_stress.nc"
+
         super().__init__(
-            save_file_prefix="era5_reanalysis_wind_stress",
-            save_dir=save_dir,
             save_file=save_file,
+            save_dir=save_dir,
             start_date=start_date,
             end_date=end_date,
         )

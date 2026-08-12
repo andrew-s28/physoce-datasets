@@ -54,10 +54,9 @@ nav = [
     "usage/python.md",
   ]},
   {"API Reference" = [
-    "api/copernicus-marine.md",
+    "api/copernicus.md",
     "api/era5.md",
-    "api/nasa.md",
-    "api/ooi-ea.md",
+    "api/ooi.md",
   ]}
 ]
 
